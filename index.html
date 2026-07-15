@@ -117,7 +117,10 @@ function download(name,text,type="application/json"){
 }
 async function importFile(file){
   try{
-    const j=JSON.parse(await file.text());
+    let txt=await file.text();
+    // Alguns backups (gerados via Python) usam NaN/Infinity, que não são JSON válido no navegador.
+    txt=txt.replace(/\bNaN\b/g,"null").replace(/-?\bInfinity\b/g,"null");
+    const j=JSON.parse(txt);
     const s=j.sessions||j.sessoes||j.sessoes_completas;
     const m=j.measures||j.medidas||j.medidas_completas;
     const p=j.plan||j.plano||j.plano_vigente;
