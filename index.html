@@ -205,13 +205,16 @@ function vTreino(){
   const efet=n.exercicios.reduce((a,ex)=>a+ex.sets.filter(x=>!x.warm&&x.carga!=="").length,0);
   const ton=n.exercicios.reduce((a,ex)=>a+ex.sets.reduce((b,x)=>x.warm?b:b+(Number(x.carga)||0)*(Number(x.reps)||0),0),0);
   const gyms=gymOptions();
+  const planTreinos=(DB.plan&&Array.isArray(DB.plan.treinos))?DB.plan.treinos:[];
   let h=`<h1>Registrar treino</h1>
   <div class="sub num">${efet} séries efetivas · ${fmtT(ton)}</div>
   <div class="card">
     <span class="lbl">Data</span><input type="date" value="${n.data}" onchange="UI.novo.data=this.value">
     <span class="lbl">Academia</span>
-    <div class="chips">${gyms.map(g=>`<button class="chip ${g===n.academia?"on":""}" onclick="UI.novo.academia=${JSON.stringify(g)};render()">${esc(g)}</button>`).join("")}</div>
+    <div class="chips">${gyms.map((g,i)=>`<button class="chip ${g===n.academia?"on":""}" onclick="selectGym(${i})">${esc(g)}</button>`).join("")}</div>
     <input style="margin-top:8px" placeholder="Outra academia…" value="${esc(gyms.includes(n.academia)?"":n.academia)}" onchange="UI.novo.academia=this.value.trim();render()">
+    ${planTreinos.length?`<span class="lbl">Treinos do plano</span>
+    <div class="chips">${planTreinos.map((t,i)=>`<button class="chip ${t.nome===n.treinoNome?"on":""}" onclick="selectPlanTreino(${i})">${esc(t.nome)}</button>`).join("")}</div>`:""}
     <span class="lbl">Nome do treino (ex.: Treino A – Peito/Tríceps)</span>
     <input value="${esc(n.treinoNome)}" onchange="UI.novo.treinoNome=this.value">
   </div>`;
@@ -236,6 +239,21 @@ function vTreino(){
   <button class="btn-p" style="width:100%;margin-top:10px" onclick="salvarSessao()">Salvar sessão</button>`;
   return h;
 }
+window.selectGym=i=>{const gyms=gymOptions();if(gyms[i]!=null){UI.novo.academia=gyms[i];render()}};
+window.selectPlanTreino=i=>{
+  const planTreinos=(DB.plan&&Array.isArray(DB.plan.treinos))?DB.plan.treinos:[];
+  const t=planTreinos[i];if(!t)return;
+  UI.novo.treinoNome=t.nome||"";
+  UI.novo.exercicios=(t.exercicios||[]).map(ex=>{
+    const nome=normNome(ex.nome);
+    const ref=ultimaVez(nome);
+    if(ref&&ref.sets.length)return{nome,sets:ref.sets.map(x=>({carga:String(x.carga),reps:String(x.reps),warm:!!x.warm}))};
+    const m=/^(\d+)\s*x\s*(\d+)/i.exec(ex.esquema||"");
+    const nSets=m?Number(m[1]):3,nReps=m?m[2]:"";
+    return{nome,sets:Array.from({length:nSets},()=>({carga:"",reps:nReps,warm:false}))};
+  });
+  render();
+};
 window.copiarRef=ei=>{const ex=UI.novo.exercicios[ei];const ref=ultimaVez(ex.nome);if(ref){ex.sets=ref.sets.map(x=>({carga:String(x.carga),reps:String(x.reps),warm:!!x.warm}));render()}};
 window.addSet=ei=>{const sets=UI.novo.exercicios[ei].sets;const last=sets[sets.length-1];sets.push(last?{...last,warm:false}:{carga:"",reps:"",warm:false});render()};
 window.salvarSessao=()=>{
