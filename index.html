@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Treino · Lucas</title>
@@ -12,8 +12,9 @@
   --tx:#e8e6df; --dim:#9a9a8f; --faint:#6d6d62;
   --amber:#e8a13c; --green:#7fb069; --red:#e05c5c; --blue:#6da3c7;
 }
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{background:var(--bg);color:var(--tx);font:15px/1.45 -apple-system,"SF Pro Text",Segoe UI,Roboto,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+html,body{background:var(--bg);color:var(--tx);font:15px/1.45 -apple-system,"SF Pro Text",Segoe UI,Roboto,sans-serif;
+  -webkit-text-size-adjust:100%;text-size-adjust:100%;overscroll-behavior:none}
 .num{font-variant-numeric:tabular-nums}
 .wrap{max-width:640px;margin:0 auto;padding:calc(14px + env(safe-area-inset-top)) 14px 90px}
 h1{font-size:20px;font-weight:800}
@@ -21,7 +22,8 @@ h1{font-size:20px;font-weight:800}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
 .card b{font-size:14.5px}
 .lbl{display:block;color:var(--dim);font-size:12px;margin:10px 0 4px}
-input,select{width:100%;background:var(--card2);border:1px solid var(--line);border-radius:10px;color:var(--tx);padding:9px 10px;font-size:15px;appearance:none;-webkit-appearance:none}
+/* 16px é o mínimo que o iOS aceita sem dar zoom automático ao focar o campo */
+input,select{width:100%;background:var(--card2);border:1px solid var(--line);border-radius:10px;color:var(--tx);padding:8px 10px;font-size:16px;appearance:none;-webkit-appearance:none}
 input:focus,select:focus,button:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
 .row{display:flex;gap:8px}
 .row>*{flex:1}
@@ -60,6 +62,17 @@ svg text{font-family:inherit}
 .xbtn{color:var(--red);border-color:transparent;background:none;font-size:16px;padding:4px}
 .ref{color:var(--faint);font-size:12px;margin-top:3px}
 .ref u{color:var(--dim);cursor:pointer;text-decoration-style:dotted}
+.mask{position:fixed;inset:0;z-index:60;background:rgba(8,9,7,.72);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
+  display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;width:100%;max-width:420px;max-height:86vh;overflow:auto;
+  box-shadow:0 18px 50px rgba(0,0,0,.55);animation:pop .18s ease-out}
+@keyframes pop{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+.modal h2{font-size:18px;font-weight:800}
+.modal .big{font-size:38px;line-height:1;text-align:center;margin:2px 0 8px}
+.mrow{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.mrow:last-of-type{border-bottom:none}
+.mrow span:first-child{color:var(--dim)}
+.pr{background:#2a2413;border:1px solid #5c4a1e;border-radius:10px;padding:8px 10px;margin-top:8px;font-size:12.5px;color:var(--amber)}
 @media(min-width:520px){.kpis{grid-template-columns:repeat(6,1fr)}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -68,6 +81,7 @@ svg text{font-family:inherit}
 <div class="wrap" id="app"></div>
 <nav class="nav" id="nav"></nav>
 <div class="flash" id="flash"></div>
+<div id="modal"></div>
 
 <script>
 "use strict";
@@ -92,6 +106,40 @@ const normNome=n=>String(n||"")
 let flashT=null;
 function flash(msg){const f=$("#flash");f.textContent=msg;f.classList.add("on");clearTimeout(flashT);flashT=setTimeout(()=>f.classList.remove("on"),2200)}
 
+/* ============================ trava de zoom ============================
+   O iOS ignora user-scalable=no desde o iOS 10, então além do meta tag
+   bloqueamos os gestos de pinça (eventos "gesture*", só do Safari) e o
+   duplo-toque. touch-action:manipulation no CSS cobre o resto.          */
+for(const ev of ["gesturestart","gesturechange","gestureend"])
+  document.addEventListener(ev,e=>e.preventDefault(),{passive:false});
+document.addEventListener("touchmove",e=>{if(e.touches.length>1)e.preventDefault()},{passive:false});
+let lastTouch=0;
+document.addEventListener("touchend",e=>{
+  const t=Date.now();
+  if(t-lastTouch<=320)e.preventDefault();   // duplo-toque
+  lastTouch=t;
+},{passive:false});
+
+/* ============================ modal ============================
+   confirm()/alert() nativos não funcionam em iframe sandbox — modal próprio. */
+let MODAL=null;
+function closeModal(){MODAL=null;$("#modal").innerHTML=""}
+function openModal(html,acoes){
+  MODAL={acoes};
+  $("#modal").innerHTML=`<div class="mask" onclick="if(event.target===this)modalAcao(-1)">
+    <div class="modal" role="dialog" aria-modal="true">${html}
+      <div class="row" style="margin-top:14px">
+        ${acoes.map((a,i)=>`<button class="${a.cls||"btn-g"}" onclick="modalAcao(${i})">${esc(a.label)}</button>`).join("")}
+      </div>
+    </div></div>`;
+}
+window.modalAcao=i=>{
+  if(!MODAL)return;
+  const a=i<0?MODAL.acoes.find(x=>x.esc):MODAL.acoes[i];
+  closeModal();
+  if(a&&a.fn)a.fn();
+};
+
 /* ============================ estado ============================ */
 const KEY="gym-app-standalone-v1";
 let DB={sessions:[],measures:[],plan:null};
@@ -99,6 +147,53 @@ try{const raw=localStorage.getItem(KEY);if(raw){const j=JSON.parse(raw);if(Array
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(DB))}catch(e){flash("Aviso: não consegui salvar no aparelho")}}
 function normalizeAll(){for(const s of DB.sessions)for(const ex of (s.exercicios||[]))ex.nome=normNome(ex.nome)}
 normalizeAll();
+
+/* ==================== correção de dados (idempotente) ====================
+   A planilha Treino.xlsx tem DOIS blocos com o título idêntico
+   "Treino B: Coxa, Glúteo, Panturrilha" (mesociclo de abril e o atual, 3x20).
+   Na importação original o bloco novo foi engolido pelo antigo e as sessões
+   de perna do mesociclo atual nunca entraram. Reposto abaixo, direto da
+   planilha. Roda uma vez por marcador; a checagem por id evita duplicar.   */
+const mkSet=(c,r)=>({carga:c,reps:r,warm:false});
+const PATCHES=[{
+  id:"treinoB-mesociclo-3x20",
+  aplicar(){
+    const tem=d=>DB.sessions.some(s=>s.data===d&&/Treino B/i.test(s.treinoNome||""));
+    const novas=[
+      {id:"p2-65",data:"2026-06-06",academia:"Prime",treinoNome:"Treino B: Coxa, Glúteo, Panturrilha",exercicios:[
+        {nome:"Stiff Halteres",tecnica:"",sets:[mkSet(30,20),mkSet(30,20),mkSet(30,25)]},
+        {nome:"Cadeira Extensora",tecnica:"Strip-Set 3x",sets:[mkSet(55,20),mkSet(60,20),mkSet(60,20)]},
+        {nome:"Cadeira Adutora",tecnica:"",sets:[mkSet(55,20),mkSet(55,20),mkSet(55,18)]},
+        {nome:"Cadeira Abdutora",tecnica:"",sets:[mkSet(55,20),mkSet(55,20),mkSet(55,20)]},
+        {nome:"Elevação Pélvica Máquina",tecnica:"",sets:[mkSet(80,20),mkSet(80,15),mkSet(80,15)]},
+        {nome:"Gêmeos Em Pé Hack",tecnica:"GVT",sets:[mkSet(80,18)]}]},
+      {id:"p2-66",data:"2026-06-16",academia:"Prime",treinoNome:"Treino B: Coxa, Glúteo, Panturrilha",exercicios:[
+        {nome:"Stiff Halteres",tecnica:"",sets:[mkSet(30,20),mkSet(30,20),mkSet(30,20)]},
+        {nome:"Cadeira Extensora",tecnica:"Strip-Set 3x",sets:[mkSet(60,20),mkSet(60,20),mkSet(60,20)]},
+        {nome:"Cadeira Adutora",tecnica:"",sets:[mkSet(55,20),mkSet(55,20),mkSet(55,20)]},
+        {nome:"Cadeira Abdutora",tecnica:"",sets:[mkSet(60,20),mkSet(60,20),mkSet(60,20)]},
+        {nome:"Elevação Pélvica Máquina",tecnica:"",sets:[mkSet(80,20),mkSet(80,15),mkSet(80,20)]},
+        {nome:"Gêmeos Em Pé Hack",tecnica:"GVT",sets:[mkSet(80,20)]}]}
+    ].filter(s=>!DB.sessions.some(x=>x.id===s.id)&&!tem(s.data));
+    if(novas.length)DB.sessions=[...novas,...DB.sessions];
+    /* o Treino D do plano perdeu o último exercício da planilha (linha 211) */
+    const tD=(DB.plan&&DB.plan.treinos||[]).find(t=>/Treino D/i.test(t.nome||""));
+    if(tD&&Array.isArray(tD.exercicios)&&!tD.exercicios.some(e=>/flex[aã]o de punho/i.test(e.nome||""))){
+      tD.exercicios.push({nome:"Flexão de Punho Barra Sentado",esquema:"10x20",tecnica:"GVT"});
+    }
+    return novas.length;
+  }
+}];
+function aplicarPatches(){
+  DB.patches=Array.isArray(DB.patches)?DB.patches:[];
+  let mudou=false;
+  for(const p of PATCHES){
+    if(DB.patches.includes(p.id))continue;
+    p.aplicar();DB.patches.push(p.id);mudou=true;
+  }
+  if(mudou){normalizeAll();try{localStorage.setItem(KEY,JSON.stringify(DB))}catch(e){}}
+}
+aplicarPatches();
 
 /* academias para seleção: histórico menos Bodytech */
 function gymOptions(){
@@ -109,7 +204,7 @@ function gymOptions(){
 const tonelagemSessao=s=>(s.exercicios||[]).reduce((a,ex)=>/\[barras\]/i.test(ex.nome)?a:a+(ex.sets||[]).reduce((b,x)=>x.warm?b:b+(Number(x.carga)||0)*(Number(x.reps)||0),0),0);
 
 /* ============================ import / export ============================ */
-function exportPayload(){return{app:"gym-tracker",exportedAt:new Date().toISOString(),sessions:DB.sessions,measures:DB.measures,plan:DB.plan}}
+function exportPayload(){return{app:"gym-tracker",exportedAt:new Date().toISOString(),sessions:DB.sessions,measures:DB.measures,plan:DB.plan,patches:DB.patches||[]}}
 function download(name,text,type="application/json"){
   const blob=new Blob([text],{type});const url=URL.createObjectURL(blob);
   const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
@@ -128,8 +223,9 @@ async function importFile(file){
     DB.sessions=s;
     if(Array.isArray(m))DB.measures=m;
     if(p)DB.plan=p;
-    normalizeAll();persist();render();
-    flash(`Backup importado ✓ (${s.length} sessões${Array.isArray(m)?`, ${m.length} medidas`:""})`);
+    DB.patches=Array.isArray(j.patches)?j.patches:[];
+    normalizeAll();aplicarPatches();persist();render();
+    flash(`Backup importado ✓ (${DB.sessions.length} sessões${Array.isArray(m)?`, ${m.length} medidas`:""})`);
   }catch(e){flash("Não consegui ler esse arquivo .json")}
 }
 async function enviarParaClaude(){
@@ -256,13 +352,80 @@ window.selectPlanTreino=i=>{
 };
 window.copiarRef=ei=>{const ex=UI.novo.exercicios[ei];const ref=ultimaVez(ex.nome);if(ref){ex.sets=ref.sets.map(x=>({carga:String(x.carga),reps:String(x.reps),warm:!!x.warm}));render()}};
 window.addSet=ei=>{const sets=UI.novo.exercicios[ei].sets;const last=sets[sets.length-1];sets.push(last?{...last,warm:false}:{carga:"",reps:"",warm:false});render()};
+/* melhor e1RM histórico de um exercício, ignorando as sessões informadas */
+function recordeE1rm(nome,excluirId){
+  let best=0;
+  for(const s of DB.sessions){
+    if(s.id===excluirId)continue;
+    for(const ex of (s.exercicios||[])){
+      if(ex.nome!==nome)continue;
+      for(const x of (ex.sets||[]))if(!x.warm)best=Math.max(best,e1rm(Number(x.carga)||0,Number(x.reps)||0));
+    }
+  }
+  return best;
+}
+function limparSessao(n){
+  return n.exercicios
+    .map(ex=>({nome:normNome(ex.nome),sets:ex.sets.filter(x=>x.carga!==""||x.reps!=="").map(x=>({carga:Number(x.carga)||0,reps:Number(x.reps)||0,warm:!!x.warm}))}))
+    .filter(ex=>ex.nome&&ex.sets.length);
+}
 window.salvarSessao=()=>{
   const n=UI.novo;
-  const exs=n.exercicios.map(ex=>({nome:normNome(ex.nome),sets:ex.sets.filter(x=>x.carga!==""||x.reps!=="").map(x=>({carga:Number(x.carga)||0,reps:Number(x.reps)||0,warm:!!x.warm}))})).filter(ex=>ex.nome&&ex.sets.length);
+  const exs=limparSessao(n);
   if(!exs.length){flash("Adicione ao menos um exercício com séries");return}
-  DB.sessions=[{id:`s-${n.data}-${uid().slice(0,4)}`,data:n.data,academia:n.academia,treinoNome:n.treinoNome,exercicios:exs},...DB.sessions];
-  persist();UI.novo=null;flash("Sessão salva ✓");render();
+  const sess={id:`s-${n.data}-${uid().slice(0,4)}`,data:n.data,academia:n.academia,treinoNome:n.treinoNome,exercicios:exs};
+  const efet=exs.reduce((a,ex)=>a+ex.sets.filter(x=>!x.warm).length,0);
+  const ton=tonelagemSessao(sess);
+  const semNome=!String(n.treinoNome||"").trim(), semAcad=!String(n.academia||"").trim();
+  openModal(`<h2>Conferir e salvar</h2>
+    <div class="sub">Revise antes de gravar no histórico.</div>
+    <div style="margin-top:12px">
+      <div class="mrow"><span>Data</span><b class="num">${brDate(n.data)}</b></div>
+      <div class="mrow"><span>Academia</span><b>${esc(n.academia||"—")}</b></div>
+      <div class="mrow"><span>Treino</span><b>${esc(n.treinoNome||"—")}</b></div>
+      <div class="mrow"><span>Exercícios</span><b class="num">${exs.length}</b></div>
+      <div class="mrow"><span>Séries efetivas</span><b class="num">${efet}</b></div>
+      <div class="mrow"><span>Tonelagem</span><b class="num">${fmtT(ton)}</b></div>
+    </div>
+    ${semNome||semAcad?`<div class="pr">⚠ ${[semNome?"sem nome do treino":"",semAcad?"sem academia":""].filter(Boolean).join(" e ")} — dá pra salvar assim, mas o histórico fica mais pobre.</div>`:""}`,
+    [{label:"Voltar",cls:"btn-g",esc:true},
+     {label:"Confirmar e salvar",cls:"btn-p",fn:()=>confirmarSalvar(sess)}]);
 };
+function confirmarSalvar(sess){
+  /* recordes precisam ser medidos antes de a sessão entrar no DB */
+  const prs=[];
+  for(const ex of sess.exercicios){
+    const ant=recordeE1rm(ex.nome,sess.id);
+    let novo=0;
+    for(const x of ex.sets)if(!x.warm)novo=Math.max(novo,e1rm(x.carga,x.reps));
+    if(ant>0&&novo>ant+0.05)prs.push({nome:ex.nome,ganho:novo-ant});
+  }
+  const ant=DB.sessions.filter(s=>s.treinoNome===sess.treinoNome&&s.data<sess.data)
+    .sort((a,b)=>b.data.localeCompare(a.data))[0];
+  const ton=tonelagemSessao(sess), tonAnt=ant?tonelagemSessao(ant):0;
+  const efet=sess.exercicios.reduce((a,ex)=>a+ex.sets.filter(x=>!x.warm).length,0);
+
+  DB.sessions=[sess,...DB.sessions];
+  persist();UI.novo=null;render();
+
+  const dias=[...new Set(DB.sessions.map(s=>s.data))].sort();
+  const idx=dias.indexOf(sess.data);
+  let seq=1;
+  for(let i=idx;i>0;i--){const g=(ts(dias[i])-ts(dias[i-1]))/DAY;if(g<=3)seq++;else break}
+  const delta=ant?ton-tonAnt:null;
+  openModal(`<div class="big">🎉</div>
+    <h2 style="text-align:center">Treino salvo!</h2>
+    <div class="sub" style="text-align:center">${esc(sess.treinoNome||"Sessão registrada")} · ${brDate(sess.data)}</div>
+    <div style="margin-top:14px">
+      <div class="mrow"><span>Séries efetivas</span><b class="num">${efet}</b></div>
+      <div class="mrow"><span>Tonelagem</span><b class="num">${fmtT(ton)}</b></div>
+      ${ant?`<div class="mrow"><span>vs. ${brDate(ant.data)}</span><b class="num" style="color:${delta>=0?"var(--green)":"var(--red)"}">${delta>=0?"▲ +":"▼ "}${fmtT(Math.abs(delta))}</b></div>`:""}
+      <div class="mrow"><span>Total no histórico</span><b class="num">${DB.sessions.length} sessões</b></div>
+      ${seq>1?`<div class="mrow"><span>Sequência</span><b class="num">🔥 ${seq} treinos seguidos</b></div>`:""}
+    </div>
+    ${prs.length?`<div class="pr">🏆 Recorde${prs.length>1?"s":""} de carga estimada:<br>${prs.map(p=>`<b>${esc(p.nome)}</b> +${fmt1(p.ganho)} kg`).join("<br>")}</div>`:""}`,
+    [{label:"Fechar",cls:"btn-p",esc:true,fn:()=>{TAB="hist";render()}}]);
+}
 
 /* ============================ aba Histórico ============================ */
 function vHist(){
@@ -452,7 +615,7 @@ function render(){
   $("#app").innerHTML=views[TAB]();
   $("#nav").innerHTML=TABS.map(([id,ic,lb])=>`<button class="${TAB===id?"on":""}" onclick="TAB='${id}';render()"><span class="ic">${ic}</span>${lb}</button>`).join("");
 }
-window.render=render;window.UI=UI;window.importFile=importFile;window.enviarParaClaude=enviarParaClaude;window.download=download;window.exportPayload=exportPayload;window.todayISO=todayISO;window.normNome=normNome;
+window.render=render;window.UI=UI;window.importFile=importFile;window.enviarParaClaude=enviarParaClaude;window.download=download;window.exportPayload=exportPayload;window.todayISO=todayISO;window.normNome=normNome;window.closeModal=closeModal;window.esc=esc;
 render();
 </script>
 </body>
