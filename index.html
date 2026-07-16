@@ -604,7 +604,7 @@ function vDash(){
       const byG=new Map();
       for(const n of exNames){const g=grupoDe(n);if(!byG.has(g))byG.set(g,[]);byG.get(g).push(n)}
       const opts=ORDEM_G.filter(g=>byG.has(g)).map(g=>
-        `<optgroup label="${g}">`+byG.get(g).sort((a,b)=>cnt[b]-cnt[a]||a.localeCompare(b))
+        `<optgroup label="${g}">`+byG.get(g).sort((a,b)=>a.localeCompare(b,"pt-BR",{numeric:true}))
           .map(n=>`<option value="${esc(n)}"${n===UI.exSel?" selected":""}>${esc(n)} · ${cnt[n]}×</option>`).join("")+`</optgroup>`).join("");
       h+=`<div class="card">
         <div class="ch"><b>Progressão de força</b><span class="tag" style="color:${COR_G[grupoDe(UI.exSel)]}">${esc(grupoDe(UI.exSel))}</span></div>
