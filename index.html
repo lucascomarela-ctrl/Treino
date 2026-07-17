@@ -60,7 +60,13 @@ svg text{font-family:inherit}
 .chk-t{border-radius:10px;font-size:15px;padding:7px 0;background:var(--card2);color:var(--faint)}
 .chk-t.on{background:#1e2f1c;border-color:var(--green);color:var(--green)}
 .setrow.ok input{opacity:.5}
-.progwrap{position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 0 6px;margin-bottom:6px}
+.badges{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+.tec{font-size:11.5px;font-weight:700;letter-spacing:.3px;color:var(--amber);background:#33270f;border:1px solid #56411c;border-radius:99px;padding:2px 10px}
+.esq{font-size:11.5px;font-weight:700;color:var(--dim);background:var(--card2);border:1px solid var(--line);border-radius:99px;padding:2px 10px}
+.sug{display:none;flex-direction:column;gap:4px;margin-top:6px}
+.sugi{text-align:left;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--tx);font-size:14px}
+.sugi small{color:var(--faint)}
+.progwrap{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 8px;margin:calc(-14px - env(safe-area-inset-top,0px)) -14px 6px}
 .progbar{height:8px;border-radius:99px;background:var(--card2);border:1px solid var(--line);overflow:hidden}
 .progfill{height:100%;background:var(--green);border-radius:99px;transition:width .3s ease}
 .proglbl{font-size:11.5px;color:var(--faint);margin-top:5px;display:flex;justify-content:space-between}
@@ -81,6 +87,13 @@ svg text{font-family:inherit}
 @keyframes pop{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
 .modal h2{font-size:18px;font-weight:800}
 .modal .big{font-size:38px;line-height:1;text-align:center;margin:2px 0 8px}
+.grow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}
+.grow .gd{width:8px;height:8px;border-radius:99px;flex:none}
+.grow .gn{flex:1;color:var(--dim)}
+.gbar{height:4px;border-radius:99px;background:var(--card2);margin-top:4px;overflow:hidden}
+.gbar>div{height:100%;border-radius:99px}
+.gsec{margin-top:14px}
+.gsec .gt{font-size:12px;color:var(--faint);text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px}
 .mrow{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px}
 .mrow:last-of-type{border-bottom:none}
 .mrow span:first-child{color:var(--dim)}
@@ -349,6 +362,86 @@ const GRUPOS=[
   ["Core",/abdominal|prancha|obl[íi]qu|eleva[çc][ãa]o de pernas|romana|core|lombar/i],
   ["Pernas",/agachamento|\bleg\b|extensora|flexora|adutora|abdutora|stiff|gl[úu]teo|p[ée]lvic|afundo|passada|avan[çc]o|hack|terra|cadeira|b[úu]lgar/i],
 ];
+const flat=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+function poolExercicios(treinoNome){
+  const ts=(DB.plan&&Array.isArray(DB.plan.treinos))?DB.plan.treinos:[];
+  const pool=[];
+  const push=n=>{const nn=normNome(n||"");if(nn&&!pool.includes(nn))pool.push(nn)};
+  for(const t of ts.filter(t=>t.nome===treinoNome))for(const ex of (t.exercicios||[]))push(ex.nome);
+  for(const t of ts.filter(t=>t.nome!==treinoNome))for(const ex of (t.exercicios||[]))push(ex.nome);
+  const cnt=new Map();
+  for(const s of DB.sessions)for(const ex of (s.exercicios||[])){const n=normNome(ex.nome);if(n)cnt.set(n,(cnt.get(n)||0)+1)}
+  for(const n of [...cnt.keys()].sort((a,b)=>cnt.get(b)-cnt.get(a)))push(n);
+  return pool;
+}
+function sugestoesEx(ei){
+  const n=UI.novo;const ex=n.exercicios[ei];if(!ex)return[];
+  const usados=n.exercicios.filter((_,i)=>i!==ei).map(e=>normNome(e.nome||"")).filter(Boolean);
+  const q=flat(ex.nome);
+  let pool=poolExercicios(n.treinoNome).filter(x=>!usados.includes(x));
+  if(q){
+    const comeca=pool.filter(x=>flat(x).startsWith(q));
+    const contem=pool.filter(x=>!flat(x).startsWith(q)&&flat(x).includes(q));
+    pool=[...comeca,...contem];
+    if(pool.length===1&&flat(pool[0])===q)return[];
+  }
+  return pool.slice(0,6);
+}
+window.sugerir=(ei,el)=>{
+  const ex=UI.novo&&UI.novo.exercicios[ei];if(!ex)return;
+  ex.nome=el.value;
+  const box=document.getElementById("sug-"+ei);if(!box)return;
+  const list=sugestoesEx(ei);
+  box.innerHTML=list.map(x=>`<button class="sugi" data-n="${esc(x)}" onmousedown="event.preventDefault();escolherSug(${ei},this.dataset.n)">${esc(x)}</button>`).join("");
+  box.style.display=list.length?"flex":"none";
+};
+function canonNome(n,treinoNome){
+  const nn=normNome(n);if(!nn)return nn;
+  const can=poolExercicios(treinoNome||"").find(x=>flat(x)===flat(nn));
+  return can||nn;
+}
+function preencherSets(ex,treinoNome){
+  if(!ex.sets.every(x=>x.carga===""&&x.reps===""))return; /* não sobrescreve o que você já digitou */
+  const ref=ex.nome?ultimaVez(ex.nome):null;
+  const s=ref?ref.sets.filter(x=>!x.warm):[];
+  if(s.length){ex.sets=s.map(x=>({carga:String(x.carga),reps:String(x.reps),warm:false,ok:false}));return}
+  const pl=planoDoEx(ex.nome,treinoNome)||{};
+  const m=/^(\d+)\s*[x×]\s*(\d+)/i.exec(String(pl.esquema||""));
+  if(m)ex.sets=Array.from({length:Number(m[1])},()=>({carga:"",reps:m[2],warm:false,ok:false}));
+}
+window.escolherSug=(ei,nome)=>{
+  const ex=UI.novo&&UI.novo.exercicios[ei];if(!ex)return;
+  ex.nome=canonNome(nome,UI.novo.treinoNome);preencherSets(ex,UI.novo.treinoNome);render();
+};
+window.blurNomeEx=ei=>{setTimeout(()=>{
+  const ex=UI.novo&&UI.novo.exercicios[ei];if(!ex)return;
+  ex.nome=canonNome(ex.nome,UI.novo.treinoNome);preencherSets(ex,UI.novo.treinoNome);render();
+},180)};
+window.addExercicio=()=>{
+  UI.novo.exercicios.push({nome:"",sets:[{carga:"",reps:"",warm:false,ok:false}]});render();
+  const ins=document.querySelectorAll("input[data-exname]");
+  const el=ins[ins.length-1];if(el)el.focus();
+};
+function planoDoEx(nome,treinoNome){
+  const ts=(DB.plan&&Array.isArray(DB.plan.treinos))?DB.plan.treinos:[];
+  const nn=normNome(nome||"");if(!nn)return null;
+  const pri=ts.filter(t=>t.nome===treinoNome).concat(ts.filter(t=>t.nome!==treinoNome));
+  let primeiro=null;
+  for(const t of pri)for(const ex of (t.exercicios||[])){
+    if(normNome(ex.nome||"")!==nn)continue;
+    if(t.nome===treinoNome)return ex;
+    if(!primeiro)primeiro=ex;
+    if(String(ex.tecnica||"").trim())return ex;
+  }
+  return primeiro;
+}
+function badgesEx(nome,treinoNome){
+  const pl=planoDoEx(nome,treinoNome)||{};
+  const tec=String(pl.tecnica||"").trim();
+  const esq=String(pl.esquema||"").trim().replace(/\s*[x×]\s*/i,"×");
+  if(!tec&&!esq)return "";
+  return `<div class="badges">${esq?`<span class="esq num">${esc(esq)}</span>`:""}${tec?`<span class="tec">⚡ ${esc(tec)}</span>`:""}</div>`;
+}
 const grupoDe=n=>{const s=String(n||"");for(const [g,re] of GRUPOS)if(re.test(s))return g;return "Outros"};
 const ORDEM_G=["Peito","Costas","Ombro","Braços","Pernas","Panturrilha","Core","Outros"];
 const COR_G={Peito:"var(--red)",Costas:"var(--blue)",Ombro:"var(--amber)","Braços":"var(--green)",Pernas:"#a78bfa",Panturrilha:"#e879a6",Core:"#5ec8b8",Outros:"var(--faint)"};
@@ -397,13 +490,17 @@ function vTreino(){
       h+=`<div class="card done">
         <div class="done-head"><span class="done-check">✓</span><b>${esc(ex.nome||"(sem nome)")}</b>
           <button class="btn-edit" onclick="UI.novo.exercicios[${ei}].done=false;render()">✎ editar</button></div>
+        ${badgesEx(ex.nome,n.treinoNome)}
         <div class="done-sets num">${ex.sets.filter(x=>x.carga!==""||x.reps!=="").map(x=>`${x.warm?"AQ·":""}${fmt1(x.carga)}×${x.reps}`).join("  ")||"—"}</div>
       </div>`;
       return;
     }
     const ref=ex.nome?ultimaVez(ex.nome):null;
     h+=`<div class="card">
-      <input placeholder="Nome do exercício" value="${esc(ex.nome)}" onchange="UI.novo.exercicios[${ei}].nome=normNome(this.value);render()">
+      <input data-exname placeholder="Nome do exercício" value="${esc(ex.nome)}" autocomplete="off"
+        oninput="sugerir(${ei},this)" onfocus="sugerir(${ei},this)" onblur="blurNomeEx(${ei})">
+      <div class="sug" id="sug-${ei}"></div>
+      ${badgesEx(ex.nome,n.treinoNome)}
       ${ref?`<div class="ref">Última vez (${brDate(ref.data)}): ${ref.sets.filter(x=>!x.warm).map(x=>`${fmt1(x.carga)}×${x.reps}`).join("  ")} — <u onclick="copiarRef(${ei})">copiar</u></div>`:""}
       ${ex.sets.map((x,si)=>`<div class="setrow ${x.ok?"ok":""}">
         <input inputmode="decimal" placeholder="carga" value="${esc(x.carga)}" onchange="UI.novo.exercicios[${ei}].sets[${si}].carga=this.value">
@@ -418,7 +515,7 @@ function vTreino(){
       </div>
     </div>`;
   });
-  h+=`<button class="btn-g" style="width:100%;margin-top:12px" onclick="UI.novo.exercicios.push({nome:'',sets:[{carga:'',reps:'',warm:false}]});render()">+ Adicionar exercício</button>
+  h+=`<button class="btn-g" style="width:100%;margin-top:12px" onclick="addExercicio()">+ Adicionar exercício</button>
   <button class="btn-p" style="width:100%;margin-top:10px" onclick="salvarSessao()">Salvar sessão</button>`;
   return h;
 }
@@ -442,6 +539,28 @@ window.concluirEx=ei=>{
   if(!String(ex.nome||"").trim()){flash("Dê um nome ao exercício antes de concluir");return}
   if(!ex.sets.some(x=>x.carga!==""&&x.reps!=="")){flash("Preencha ao menos uma série antes de concluir");return}
   ex.done=true;render();
+  if(UI.novo.exercicios.length&&UI.novo.exercicios.every(e=>e.done))mostrarResumo();
+};
+window.mostrarResumo=()=>{
+  const n=UI.novo;if(!n)return;
+  const exs=limparSessao(n);if(!exs.length)return;
+  const sess={data:n.data,academia:n.academia,treinoNome:n.treinoNome,exercicios:exs};
+  const ant=sessaoAnterior(sess.treinoNome,sess.data);
+  const ton=tonelagemSessao(sess), tonAnt=ant?tonelagemSessao(ant):0, delta=ant?ton-tonAnt:null;
+  const efet=exs.reduce((a,ex)=>a+ex.sets.filter(x=>!x.warm).length,0);
+  const linhasG=linhasGrupos(sess,ant);
+  openModal(`<div class="big">💪</div>
+    <h2 style="text-align:center">Treino concluído!</h2>
+    <div class="sub" style="text-align:center">${esc(sess.treinoNome||"Sessão")} · ${brDate(sess.data)}</div>
+    <div style="margin-top:14px">
+      <div class="mrow"><span>Exercícios</span><b class="num">${exs.length}</b></div>
+      <div class="mrow"><span>Séries efetivas</span><b class="num">${efet}</b></div>
+      <div class="mrow"><span>Tonelagem</span><b class="num">${fmtT(ton)}</b></div>
+      ${ant?`<div class="mrow"><span>vs. ${brDate(ant.data)}</span><b class="num" style="color:${delta>=0?"var(--green)":"var(--red)"}">${delta>=0?"▲ +":"▼ "}${fmtT(Math.abs(delta))}</b></div>`:""}
+    </div>
+    ${linhasG?`<div class="gsec"><div class="gt">Volume por grupamento${ant?` · vs. ${brDate(ant.data)}`:""}</div>${linhasG}</div>`:""}`,
+    [{label:"Continuar editando",cls:"btn-g",esc:true},
+     {label:"Salvar sessão",cls:"btn-p",fn:()=>salvarSessao()}]);
 };
 window.copiarRef=ei=>{const ex=UI.novo.exercicios[ei];const ref=ultimaVez(ex.nome);if(ref){const s=ref.sets.filter(x=>!x.warm);if(s.length){ex.sets=s.map(x=>({carga:String(x.carga),reps:String(x.reps),warm:false,ok:false}))}render()}};
 window.addSet=ei=>{const sets=UI.novo.exercicios[ei].sets;const last=sets[sets.length-1];sets.push(last?{...last,warm:false,ok:false}:{carga:"",reps:"",warm:false,ok:false});render()};
@@ -459,7 +578,7 @@ function recordeE1rm(nome,excluirId){
 }
 function limparSessao(n){
   return n.exercicios
-    .map(ex=>({nome:normNome(ex.nome),sets:ex.sets.filter(x=>x.carga!==""||x.reps!=="").map(x=>({carga:Number(x.carga)||0,reps:Number(x.reps)||0,warm:!!x.warm}))}))
+    .map(ex=>({nome:canonNome(ex.nome,n.treinoNome),sets:ex.sets.filter(x=>x.carga!==""||x.reps!=="").map(x=>({carga:Number(x.carga)||0,reps:Number(x.reps)||0,warm:!!x.warm}))}))
     .filter(ex=>ex.nome&&ex.sets.length);
 }
 window.salvarSessao=()=>{
@@ -484,6 +603,28 @@ window.salvarSessao=()=>{
     [{label:"Voltar",cls:"btn-g",esc:true},
      {label:"Confirmar e salvar",cls:"btn-p",fn:()=>confirmarSalvar(sess)}]);
 };
+function volPorGrupo(s){const acc={};if(!s)return acc;for(const ex of s.exercicios){let v=0;
+  for(const x of ex.sets)if(!x.warm)v+=(Number(x.carga)||0)*(Number(x.reps)||0);
+  if(v>0){const g=grupoDe(ex.nome);acc[g]=(acc[g]||0)+v}}return acc}
+function linhasGrupos(sess,ant){
+  const gNow=volPorGrupo(sess), gAnt=volPorGrupo(ant);
+  const gAll=ORDEM_G.filter(g=>gNow[g]||gAnt[g]);
+  const gMax=Math.max(1,...gAll.map(g=>gNow[g]||0));
+  return gAll.map(g=>{
+    const v=gNow[g]||0, va=gAnt[g]||0, d=v-va;
+    const chip=!ant?"":!va&&v?`<b class="num" style="color:var(--blue)">novo</b>`
+      :!v?`<b class="num" style="color:var(--red)">▼ −${fmtT(va)}</b>`
+      :Math.abs(d)<0.5?`<b class="num" style="color:var(--faint)">=</b>`
+      :`<b class="num" style="color:${d>0?"var(--green)":"var(--red)"}">${d>0?"▲ +":"▼ −"}${fmtT(Math.abs(d))}</b>`;
+    return `<div class="grow"><span class="gd" style="background:${COR_G[g]}"></span>
+      <span class="gn">${g}<div class="gbar"><div style="width:${Math.round(v/gMax*100)}%;background:${COR_G[g]}"></div></div></span>
+      <b class="num">${fmtT(v)}</b>${chip}</div>`;
+  }).join("");
+}
+function sessaoAnterior(nome,data){
+  return DB.sessions.filter(s=>s.treinoNome===nome&&s.data<data)
+    .sort((a,b)=>b.data.localeCompare(a.data))[0];
+}
 function confirmarSalvar(sess){
   /* recordes precisam ser medidos antes de a sessão entrar no DB */
   const prs=[];
@@ -493,10 +634,10 @@ function confirmarSalvar(sess){
     for(const x of ex.sets)if(!x.warm)novo=Math.max(novo,e1rm(x.carga,x.reps));
     if(ant>0&&novo>ant+0.05)prs.push({nome:ex.nome,ganho:novo-ant});
   }
-  const ant=DB.sessions.filter(s=>s.treinoNome===sess.treinoNome&&s.data<sess.data)
-    .sort((a,b)=>b.data.localeCompare(a.data))[0];
+  const ant=sessaoAnterior(sess.treinoNome,sess.data);
   const ton=tonelagemSessao(sess), tonAnt=ant?tonelagemSessao(ant):0;
   const efet=sess.exercicios.reduce((a,ex)=>a+ex.sets.filter(x=>!x.warm).length,0);
+  const linhasG=linhasGrupos(sess,ant);
 
   DB.sessions=[sess,...DB.sessions];
   persist();UI.novo=null;render();
@@ -516,6 +657,7 @@ function confirmarSalvar(sess){
       <div class="mrow"><span>Total no histórico</span><b class="num">${DB.sessions.length} sessões</b></div>
       ${seq>1?`<div class="mrow"><span>Sequência</span><b class="num">🔥 ${seq} treinos seguidos</b></div>`:""}
     </div>
+    ${linhasG?`<div class="gsec"><div class="gt">Volume por grupamento${ant?` · vs. ${brDate(ant.data)}`:""}</div>${linhasG}</div>`:""}
     ${prs.length?`<div class="pr">🏆 Recorde${prs.length>1?"s":""} de carga estimada:<br>${prs.map(p=>`<b>${esc(p.nome)}</b> +${fmt1(p.ganho)} kg`).join("<br>")}</div>`:""}`,
     [{label:"Fechar",cls:"btn-p",esc:true,fn:()=>{TAB="hist";render()}}]);
 }
@@ -784,6 +926,18 @@ function render(){
 }
 window.render=render;window.UI=UI;window.importFile=importFile;window.enviarParaClaude=enviarParaClaude;window.download=download;window.exportPayload=exportPayload;window.todayISO=todayISO;window.normNome=normNome;window.closeModal=closeModal;window.esc=esc;
 render();
+
+document.addEventListener("focusin",e=>{
+  const el=e.target;
+  if(!el||el.tagName!=="INPUT"||el.type==="date")return;
+  setTimeout(()=>{
+    if(document.activeElement!==el)return;
+    const vv=window.visualViewport;
+    const vh=vv?vv.height:window.innerHeight, off=vv?vv.offsetTop:0;
+    const r=el.getBoundingClientRect();
+    window.scrollBy({top:r.top+r.height/2-(off+vh/2),behavior:"smooth"});
+  },350);
+});
 </script>
 </body>
 </html>
