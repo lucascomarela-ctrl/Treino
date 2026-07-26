@@ -987,50 +987,70 @@ function render(){
 window.render=render;window.UI=UI;window.importFile=importFile;window.enviarParaClaude=enviarParaClaude;window.download=download;window.exportPayload=exportPayload;window.todayISO=todayISO;window.normNome=normNome;window.closeModal=closeModal;window.esc=esc;
 render();
 
-/* ===== campo focado sempre visível acima do teclado (iOS) =====
-   O teclado + barra de acessórios só aparecem depois do focus, e a
-   visualViewport leva alguns quadros para encolher. Por isso reposiciona
-   várias vezes e também a cada resize da viewport visível. */
-let campoFoco=null, centrarT=[];
+/* ===== campo focado visível acima do teclado (iOS) =====
+   Regra: só mexe na rolagem se o campo estiver mesmo encoberto, e mexe
+   uma vez só. A versão anterior recentralizava a cada quadro da animação
+   do teclado, o que fazia a tela tremer. Agora os eventos de resize da
+   visualViewport são debounced: a correção acontece quando o teclado
+   para de se mover, num único scroll suave.                            */
+const FOLGA_BAIXO=72;   /* espaço livre acima do teclado / barra de acessórios */
+const FOLGA_TOPO=58;    /* espaço livre abaixo da barra de progresso fixa      */
+let campoFoco=null, kbConhecida=0, tFoco=null, tQuieto=null;
 function alturaTeclado(){
   const vv=window.visualViewport;
-  return vv?Math.max(0,window.innerHeight-vv.height):0;
+  return vv?Math.max(0,Math.round(window.innerHeight-vv.height)):0;
 }
-function folgaTeclado(){
+function bandaVisivel(){
+  const vv=window.visualViewport;
+  return vv?{topo:vv.offsetTop,base:vv.offsetTop+vv.height}:{topo:0,base:window.innerHeight};
+}
+/* só cresce enquanto o campo está focado: encolher no meio da animação
+   move a âncora de rolagem e é justamente o que provoca o tremor */
+function folgaTeclado(kb){
   const app=$("#app");if(!app)return;
-  const kb=alturaTeclado();
-  app.style.paddingBottom=kb>80?(kb+160)+"px":"";   /* espaço para poder rolar o último card */
+  const alvo=kb>80?kb+120:0, atual=Number(app.dataset.kbpad||0);
+  if(alvo>atual+8){app.style.paddingBottom=alvo+"px";app.dataset.kbpad=String(alvo)}
 }
-function centrarCampo(suave){
+function ajustarCampo(){
   const el=campoFoco;
   if(!el||!el.isConnected||document.activeElement!==el)return;
-  const vv=window.visualViewport;
-  const vh=vv?vv.height:window.innerHeight, off=vv?vv.offsetTop:0;
-  const r=el.getBoundingClientRect();
-  const alvo=off+vh*0.40;                            /* um pouco acima do meio da área visível */
-  const dy=(r.top+r.height/2)-alvo;
-  if(Math.abs(dy)<8)return;
-  try{window.scrollBy({top:dy,behavior:suave?"smooth":"auto"})}catch(e){window.scrollBy(0,dy)}
+  const b=bandaVisivel(), r=el.getBoundingClientRect();
+  let dy=0;
+  if(r.bottom>b.base-FOLGA_BAIXO)      dy=r.bottom-(b.base-FOLGA_BAIXO);   /* atrás do teclado */
+  else if(r.top<b.topo+FOLGA_TOPO)     dy=r.top-(b.topo+FOLGA_TOPO);       /* atrás do cabeçalho */
+  else return;                                                             /* já visível: não mexe */
+  /* campo mais alto que a área livre: encosta o topo dele no limite de cima */
+  const livre=b.base-b.topo-FOLGA_BAIXO-FOLGA_TOPO;
+  if(r.height>livre)dy=r.top-(b.topo+FOLGA_TOPO);
+  if(Math.abs(dy)<12)return;
+  try{window.scrollBy({top:dy,behavior:"smooth"})}catch(e){window.scrollBy(0,dy)}
 }
-function agendarCentrar(){
-  centrarT.forEach(clearTimeout);centrarT=[];
-  [60,220,420,680,950].forEach((t,i)=>centrarT.push(setTimeout(()=>{folgaTeclado();centrarCampo(i===0)},t)));
-}
-function limparCentrar(){centrarT.forEach(clearTimeout);centrarT=[]}
 document.addEventListener("focusin",e=>{
   const el=e.target;
   if(!el||(el.tagName!=="INPUT"&&el.tagName!=="TEXTAREA")||el.type==="date")return;
-  campoFoco=el;agendarCentrar();
+  campoFoco=el;
+  const kb=alturaTeclado();
+  folgaTeclado(kb||kbConhecida);
+  clearTimeout(tFoco);
+  /* teclado já aberto (troca de campo): corrige logo. Fechado: espera abrir. */
+  tFoco=setTimeout(ajustarCampo,kb>80?110:430);
 });
 document.addEventListener("focusout",()=>{
   setTimeout(()=>{
     const a=document.activeElement;
     if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"))return;
-    campoFoco=null;limparCentrar();
-    const app=$("#app");if(app)app.style.paddingBottom="";
-  },120);
+    campoFoco=null;clearTimeout(tFoco);clearTimeout(tQuieto);
+    const app=$("#app");if(app){app.style.paddingBottom="";app.dataset.kbpad="0"}
+  },160);
 });
-if(window.visualViewport)window.visualViewport.addEventListener("resize",()=>{folgaTeclado();centrarCampo(false)});
+if(window.visualViewport)window.visualViewport.addEventListener("resize",()=>{
+  const kb=alturaTeclado();
+  if(kb>80)kbConhecida=kb;
+  if(!campoFoco)return;
+  clearTimeout(tFoco);clearTimeout(tQuieto);
+  /* espera o teclado parar de se mover antes de corrigir */
+  tQuieto=setTimeout(()=>{folgaTeclado(kb);ajustarCampo()},150);
+});
 </script>
 </body>
 </html>
