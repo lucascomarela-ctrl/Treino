@@ -245,7 +245,15 @@ function gymOptions(){
   for(const s of DB.sessions)if(s.academia&&!/bodytech/i.test(s.academia))cnt[s.academia]=(cnt[s.academia]||0)+1;
   return Object.entries(cnt).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
 }
-const tonelagemSessao=s=>(s.exercicios||[]).reduce((a,ex)=>/\[barras\]/i.test(ex.nome)?a:a+(ex.sets||[]).reduce((b,x)=>x.warm?b:b+(Number(x.carga)||0)*(Number(x.reps)||0),0),0);
+/* ==================== carga em barras ====================
+   Exercícios marcados com [barras] no nome têm a carga anotada em barras
+   do aparelho, não em kg. 1 barra = 5 kg. A conversão vale para tudo que
+   é agregado (tonelagem, volume, peso máximo, e1RM); a listagem das
+   séries continua mostrando o número que você digitou.               */
+const FATOR_BARRA=5;
+const fatorEx=n=>/\[barras\]/i.test(String(n||""))?FATOR_BARRA:1;
+const kgDe=(nome,carga)=>(Number(carga)||0)*fatorEx(nome);
+const tonelagemSessao=s=>(s.exercicios||[]).reduce((a,ex)=>a+(ex.sets||[]).reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*(Number(x.reps)||0),0),0);
 
 /* ============================ import / export ============================ */
 function exportPayload(){return{app:"gym-tracker",exportedAt:new Date().toISOString(),sessions:DB.sessions,measures:DB.measures,plan:DB.plan,patches:DB.patches||[]}}
@@ -351,16 +359,24 @@ function chart({w=400,h=190,pad={l:38,r:10,t:10,b:20},xs,series=[],bars=null,xLa
 const legend=items=>`<div class="sub" style="margin-top:4px">${items.map(([c,l])=>`<span style="color:${c}">●</span> ${esc(l)}`).join("&nbsp;&nbsp;")}</div>`;
 
 /* ==================== grupamento muscular ====================
-   A ordem importa: "Gêmeos Em Pé Hack" é panturrilha (apesar do "Hack"),
-   "Remada Alta" e "Crucifixo Inverso" são ombro (não costas / peito).   */
+   Lista ordenada: vence o primeiro que casar. A ordem resolve as
+   ambiguidades — "Gêmeos Em Pé Hack" é panturrilha (apesar do "Hack"),
+   "Remada Alta" e "Crucifixo Inverso" são ombro (não dorsais / peitoral),
+   "Cadeira Abdutora" é glúteo (antes de cair no genérico "cadeira"),
+   "Coice de Tríceps" é tríceps e "Coice" sozinho é glúteo.
+   Trapézio é grupo próprio; lombar/hiperextensão entram em Dorsais.  */
 const GRUPOS=[
   ["Panturrilha",/g[êe]meos|panturrilha|s[óo]leo/i],
-  ["Ombro",/desenvolvimento|militar|eleva[çc][ãa]o lateral|eleva[çc][ãa]o frontal|remada alta|crucifixo (inverso|invertido)|encolhimento|arnold|deltoid|ombro|trap[ée]zio|face pull/i],
-  ["Braços",/rosca|b[íi]ceps|tr[íi]ceps|testa|franc[êe]s|coice|mergulho|paralela|punho|antebra[çc]o|martelo|scott/i],
-  ["Peito",/supino|crucifixo|cross-?over|peck|voador|peitoral|flex[ãa]o de bra[çc]o/i],
-  ["Costas",/puxada|remada|pulldown|barra fixa|pullover|serrote|dorsal|graviton/i],
-  ["Core",/abdominal|prancha|obl[íi]qu|eleva[çc][ãa]o de pernas|romana|core|lombar/i],
-  ["Pernas",/agachamento|\bleg\b|extensora|flexora|adutora|abdutora|stiff|gl[úu]teo|p[ée]lvic|afundo|passada|avan[çc]o|hack|terra|cadeira|b[úu]lgar/i],
+  ["Antebraço",/antebra[çc]o|punho|preens[ãa]o|rosca inversa|farmer|handgrip/i],
+  ["Bíceps",/rosca|b[íi]ceps|scott|martelo|concentrad/i],
+  ["Tríceps",/tr[íi]ceps|testa|franc[êe]s|mergulho|paralelas?\b|pushdown/i],
+  ["Ombros",/desenvolvimento|militar|eleva[çc][ãa]o lateral|eleva[çc][ãa]o frontal|remada alta|crucifixo (inverso|invertido)|arnold|deltoid|ombro|face pull/i],
+  ["Abdome",/abdominal|abd[oô]men|abdome|prancha|obl[íi]qu|eleva[çc][ãa]o de pernas|romana|core/i],
+  ["Trapézio",/encolhimento|trap[ée]zio|shrug/i],
+  ["Peitoral",/supino|crucifixo|cross-?over|peck|voador|peitoral|flex[ãa]o de bra[çc]o/i],
+  ["Dorsais",/puxada|remada|pulldown|barra fixa|pullover|serrote|dorsal|graviton|lombar|hiperextens[ãa]o|extens[ãa]o de tronco/i],
+  ["Glúteo",/gl[úu]teo|p[ée]lvic|abdutora|abdu[çc][ãa]o|coice|kickback/i],
+  ["Coxa",/agachamento|\bleg\b|extensora|flexora|adutora|adu[çc][ãa]o|stiff|afundo|passada|avan[çc]o|hack|terra|cadeira|b[úu]lgar|quadr[íi]ceps|posterior de coxa|coxa/i],
 ];
 const flat=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 function poolExercicios(treinoNome){
@@ -443,8 +459,9 @@ function badgesEx(nome,treinoNome){
   return `<div class="badges">${esq?`<span class="esq num">${esc(esq)}</span>`:""}${tec?`<span class="tec">⚡ ${esc(tec)}</span>`:""}</div>`;
 }
 const grupoDe=n=>{const s=String(n||"");for(const [g,re] of GRUPOS)if(re.test(s))return g;return "Outros"};
-const ORDEM_G=["Peito","Costas","Ombro","Braços","Pernas","Panturrilha","Core","Outros"];
-const COR_G={Peito:"var(--red)",Costas:"var(--blue)",Ombro:"var(--amber)","Braços":"var(--green)",Pernas:"#a78bfa",Panturrilha:"#e879a6",Core:"#5ec8b8",Outros:"var(--faint)"};
+const ORDEM_G=["Coxa","Glúteo","Panturrilha","Abdome","Dorsais","Trapézio","Peitoral","Bíceps","Tríceps","Antebraço","Ombros","Outros"];
+const COR_G={Coxa:"#a78bfa","Glúteo":"#e879a6",Panturrilha:"#e0894c",Abdome:"#5ec8b8",Dorsais:"var(--blue)","Trapézio":"#4f7fa8",Peitoral:"var(--red)","Bíceps":"var(--green)","Tríceps":"#b5d67a","Antebraço":"#94a3b8",Ombros:"var(--amber)",Outros:"var(--faint)"};
+
 
 /* ============================ estado de UI ============================ */
 let TAB="treino";
@@ -465,7 +482,7 @@ function vTreino(){
   if(!UI.novo)UI.novo=novoTreinoVazio();
   const n=UI.novo;
   const efet=n.exercicios.reduce((a,ex)=>a+ex.sets.filter(x=>!x.warm&&x.carga!=="").length,0);
-  const ton=n.exercicios.reduce((a,ex)=>a+ex.sets.reduce((b,x)=>x.warm?b:b+(Number(x.carga)||0)*(Number(x.reps)||0),0),0);
+  const ton=n.exercicios.reduce((a,ex)=>a+ex.sets.reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*(Number(x.reps)||0),0),0);
   const gyms=gymOptions();
   const planTreinos=(DB.plan&&Array.isArray(DB.plan.treinos))?DB.plan.treinos:[];
   const totEx=n.exercicios.length;
@@ -534,12 +551,55 @@ window.selectPlanTreino=i=>{
   });
   render();
 };
+/* estatísticas de um exercício (só séries efetivas preenchidas) */
+function statsEx(sets,nome){
+  const f=fatorEx(nome);
+  const ef=(sets||[]).filter(x=>!x.warm&&x.carga!==""&&x.reps!=="");
+  const c=x=>(Number(x.carga)||0)*f;
+  return{
+    n:ef.length,
+    max:ef.length?Math.max(...ef.map(c)):0,
+    vol:ef.reduce((a,x)=>a+c(x)*(Number(x.reps)||0),0),
+    reps:ef.reduce((a,x)=>a+(Number(x.reps)||0),0),
+    e1:ef.reduce((a,x)=>Math.max(a,c(x)*(1+Math.min(Number(x.reps)||0,15)/30)),0),
+    txt:ef.map(x=>`${fmt1(x.carga)}×${x.reps}`).join("  ")
+  };
+}
+function deltaTag(d,f){
+  if(d==null||!isFinite(d))return"";
+  if(Math.abs(d)<0.05)return `<span style="color:var(--dim);font-weight:600"> = igual</span>`;
+  return `<span class="num" style="color:${d>0?"var(--green)":"var(--red)"};font-weight:600"> ${d>0?"▲ +":"▼ −"}${f(Math.abs(d))}</span>`;
+}
 window.concluirEx=ei=>{
   const ex=UI.novo.exercicios[ei];
   if(!String(ex.nome||"").trim()){flash("Dê um nome ao exercício antes de concluir");return}
   if(!ex.sets.some(x=>x.carga!==""&&x.reps!=="")){flash("Preencha ao menos uma série antes de concluir");return}
+  const nome=canonNome(ex.nome,UI.novo.treinoNome)||ex.nome;
+  const ref=ultimaVez(nome);
+  const a=statsEx(ex.sets,nome);
+  let b=ref?statsEx(ref.sets,nome):null; if(b&&!b.n)b=null;
+  const kg=v=>fmt1(v)+" kg", un=v=>fmt1(v);
+  const barras=fatorEx(nome)>1;
+  let linhas=`<div class="mrow"><span>Séries efetivas</span><b class="num">${a.n}${b?deltaTag(a.n-b.n,un):""}</b></div>
+    <div class="mrow"><span>Peso máximo</span><b class="num">${kg(a.max)}${b?deltaTag(a.max-b.max,kg):""}</b></div>
+    <div class="mrow"><span>Volume</span><b class="num">${fmtT(a.vol)}${b?deltaTag(a.vol-b.vol,fmtT):""}</b></div>
+    <div class="mrow"><span>Melhor e1RM</span><b class="num">${kg(a.e1)}${b?deltaTag(a.e1-b.e1,kg):""}</b></div>`;
+  openModal(`<h2>Concluir exercício?</h2>
+    <div class="sub">${esc(nome)} · ${esc(grupoDe(nome))}${barras?` · carga em barras (×${FATOR_BARRA} kg)`:""}</div>
+    <div style="margin-top:12px">${linhas}</div>
+    <div class="gsec">
+      <div class="gt">Hoje</div>
+      <div class="num" style="font-size:13px;margin-top:2px">${esc(a.txt||"—")}</div>
+      <div class="gt" style="margin-top:10px">${b?`Anterior · ${brDate(ref.data)}`:"Anterior"}</div>
+      <div class="num" style="font-size:13px;color:var(--dim);margin-top:2px">${b?esc(b.txt):"primeira vez que você registra este exercício"}</div>
+    </div>`,
+    [{label:"Voltar",cls:"btn-g",esc:true},
+     {label:"✓ Concluir",cls:"btn-p",fn:()=>aplicarConclusao(ei)}]);
+};
+window.aplicarConclusao=ei=>{
+  const ex=UI.novo&&UI.novo.exercicios[ei];if(!ex)return;
   ex.done=true;render();
-  if(UI.novo.exercicios.length&&UI.novo.exercicios.every(e=>e.done))mostrarResumo();
+  if(UI.novo.exercicios.length&&UI.novo.exercicios.every(e=>e.done))setTimeout(mostrarResumo,80);
 };
 window.mostrarResumo=()=>{
   const n=UI.novo;if(!n)return;
@@ -571,7 +631,7 @@ function recordeE1rm(nome,excluirId){
     if(s.id===excluirId)continue;
     for(const ex of (s.exercicios||[])){
       if(ex.nome!==nome)continue;
-      for(const x of (ex.sets||[]))if(!x.warm)best=Math.max(best,e1rm(Number(x.carga)||0,Number(x.reps)||0));
+      for(const x of (ex.sets||[]))if(!x.warm)best=Math.max(best,e1rm(kgDe(ex.nome,x.carga),Number(x.reps)||0));
     }
   }
   return best;
@@ -604,7 +664,7 @@ window.salvarSessao=()=>{
      {label:"Confirmar e salvar",cls:"btn-p",fn:()=>confirmarSalvar(sess)}]);
 };
 function volPorGrupo(s){const acc={};if(!s)return acc;for(const ex of s.exercicios){let v=0;
-  for(const x of ex.sets)if(!x.warm)v+=(Number(x.carga)||0)*(Number(x.reps)||0);
+  for(const x of ex.sets)if(!x.warm)v+=kgDe(ex.nome,x.carga)*(Number(x.reps)||0);
   if(v>0){const g=grupoDe(ex.nome);acc[g]=(acc[g]||0)+v}}return acc}
 function linhasGrupos(sess,ant){
   const gNow=volPorGrupo(sess), gAnt=volPorGrupo(ant);
@@ -631,7 +691,7 @@ function confirmarSalvar(sess){
   for(const ex of sess.exercicios){
     const ant=recordeE1rm(ex.nome,sess.id);
     let novo=0;
-    for(const x of ex.sets)if(!x.warm)novo=Math.max(novo,e1rm(x.carga,x.reps));
+    for(const x of ex.sets)if(!x.warm)novo=Math.max(novo,e1rm(kgDe(ex.nome,x.carga),x.reps));
     if(ant>0&&novo>ant+0.05)prs.push({nome:ex.nome,ganho:novo-ant});
   }
   const ant=sessaoAnterior(sess.treinoNome,sess.data);
@@ -769,8 +829,9 @@ function vDash(){
       for(const s of S){let best=null,bestE=null;
         for(const ex of (s.exercicios||[]))if(ex.nome===UI.exSel)
           for(const x of (ex.sets||[]))if(!x.warm&&x.carga>0){
-            if(best==null||x.carga>best)best=x.carga;
-            const e=e1rm(x.carga,x.reps);if(bestE==null||e>bestE)bestE=e}
+            const c=kgDe(ex.nome,x.carga);
+            if(best==null||c>best)best=c;
+            const e=e1rm(c,x.reps);if(bestE==null||e>bestE)bestE=e}
         if(best!=null)prog.push({t:ts(s.data),c:best,e:bestE})}
       const dE=prog.length>1?prog[prog.length-1].e-prog[0].e:null;
       /* o seletor era uma lista corrida de dezenas de nomes — agora vai
@@ -791,8 +852,7 @@ function vDash(){
 
       /* volume por grupo: atual vs. período anterior */
       const somaG=acc=>arr=>{for(const s of arr)for(const ex of (s.exercicios||[])){
-        if(/\[barras\]/i.test(ex.nome))continue;
-        const t=(ex.sets||[]).reduce((b,x)=>x.warm?b:b+(Number(x.carga)||0)*(Number(x.reps)||0),0);
+        const t=(ex.sets||[]).reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*(Number(x.reps)||0),0);
         if(t>0){const g=grupoDe(ex.nome);acc[g]=(acc[g]||0)+t}}};
       const vg={},vgP={};somaG(vg)(S);somaG(vgP)(P);
       const gs=Object.entries(vg).sort((a,b)=>b[1]-a[1]);
@@ -927,17 +987,50 @@ function render(){
 window.render=render;window.UI=UI;window.importFile=importFile;window.enviarParaClaude=enviarParaClaude;window.download=download;window.exportPayload=exportPayload;window.todayISO=todayISO;window.normNome=normNome;window.closeModal=closeModal;window.esc=esc;
 render();
 
+/* ===== campo focado sempre visível acima do teclado (iOS) =====
+   O teclado + barra de acessórios só aparecem depois do focus, e a
+   visualViewport leva alguns quadros para encolher. Por isso reposiciona
+   várias vezes e também a cada resize da viewport visível. */
+let campoFoco=null, centrarT=[];
+function alturaTeclado(){
+  const vv=window.visualViewport;
+  return vv?Math.max(0,window.innerHeight-vv.height):0;
+}
+function folgaTeclado(){
+  const app=$("#app");if(!app)return;
+  const kb=alturaTeclado();
+  app.style.paddingBottom=kb>80?(kb+160)+"px":"";   /* espaço para poder rolar o último card */
+}
+function centrarCampo(suave){
+  const el=campoFoco;
+  if(!el||!el.isConnected||document.activeElement!==el)return;
+  const vv=window.visualViewport;
+  const vh=vv?vv.height:window.innerHeight, off=vv?vv.offsetTop:0;
+  const r=el.getBoundingClientRect();
+  const alvo=off+vh*0.40;                            /* um pouco acima do meio da área visível */
+  const dy=(r.top+r.height/2)-alvo;
+  if(Math.abs(dy)<8)return;
+  try{window.scrollBy({top:dy,behavior:suave?"smooth":"auto"})}catch(e){window.scrollBy(0,dy)}
+}
+function agendarCentrar(){
+  centrarT.forEach(clearTimeout);centrarT=[];
+  [60,220,420,680,950].forEach((t,i)=>centrarT.push(setTimeout(()=>{folgaTeclado();centrarCampo(i===0)},t)));
+}
+function limparCentrar(){centrarT.forEach(clearTimeout);centrarT=[]}
 document.addEventListener("focusin",e=>{
   const el=e.target;
-  if(!el||el.tagName!=="INPUT"||el.type==="date")return;
-  setTimeout(()=>{
-    if(document.activeElement!==el)return;
-    const vv=window.visualViewport;
-    const vh=vv?vv.height:window.innerHeight, off=vv?vv.offsetTop:0;
-    const r=el.getBoundingClientRect();
-    window.scrollBy({top:r.top+r.height/2-(off+vh/2),behavior:"smooth"});
-  },350);
+  if(!el||(el.tagName!=="INPUT"&&el.tagName!=="TEXTAREA")||el.type==="date")return;
+  campoFoco=el;agendarCentrar();
 });
+document.addEventListener("focusout",()=>{
+  setTimeout(()=>{
+    const a=document.activeElement;
+    if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"))return;
+    campoFoco=null;limparCentrar();
+    const app=$("#app");if(app)app.style.paddingBottom="";
+  },120);
+});
+if(window.visualViewport)window.visualViewport.addEventListener("resize",()=>{folgaTeclado();centrarCampo(false)});
 </script>
 </body>
 </html>
