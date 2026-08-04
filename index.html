@@ -408,8 +408,9 @@ window.sugerir=(ei,el)=>{
   ex.nome=el.value;
   const box=document.getElementById("sug-"+ei);if(!box)return;
   const list=sugestoesEx(ei);
-  box.innerHTML=list.map(x=>`<button class="sugi" data-n="${esc(x)}" onmousedown="event.preventDefault();escolherSug(${ei},this.dataset.n)">${esc(x)}</button>`).join("");
+  box.innerHTML=list.map(x=>`<button class="sugi" data-n="${esc(x)}" onmousedown="event.preventDefault()" onclick="escolherSug(${ei},this.dataset.n)">${esc(x)}</button>`).join("");
   box.style.display=list.length?"flex":"none";
+  if(window.reajusteLeve)window.reajusteLeve();
 };
 function canonNome(n,treinoNome){
   const nn=normNome(n);if(!nn)return nn;
@@ -431,7 +432,15 @@ window.escolherSug=(ei,nome)=>{
 };
 window.blurNomeEx=ei=>{setTimeout(()=>{
   const ex=UI.novo&&UI.novo.exercicios[ei];if(!ex)return;
-  ex.nome=canonNome(ex.nome,UI.novo.treinoNome);preencherSets(ex,UI.novo.treinoNome);render();
+  /* voltou o foco para um campo de nome (ou o arrasto nem tirou o foco): não mexe */
+  const a=document.activeElement;
+  if(a&&a.hasAttribute&&a.hasAttribute("data-exname"))return;
+  const nomeAntes=ex.nome, setsAntes=JSON.stringify(ex.sets);
+  ex.nome=canonNome(ex.nome,UI.novo.treinoNome);preencherSets(ex,UI.novo.treinoNome);
+  if(ex.nome!==nomeAntes||JSON.stringify(ex.sets)!==setsAntes){render();return}
+  /* nada mudou: só fecha a lista, sem reconstruir a tela (evita o salto) */
+  const box=document.getElementById("sug-"+ei);
+  if(box){box.style.display="none";box.innerHTML=""}
 },180)};
 window.addExercicio=()=>{
   UI.novo.exercicios.push({nome:"",sets:[{carga:"",reps:"",warm:false,ok:false}]});render();
@@ -979,23 +988,39 @@ function vBkp(){
 
 /* ============================ shell ============================ */
 const TABS=[["treino","🏋️","Treino"],["hist","🗓","Histórico"],["dash","📈","Dashboard"],["med","⚖️","Medidas"],["bkp","💾","Backup"]];
+let TAB_ANT=null;
 function render(){
   const views={treino:vTreino,hist:vHist,dash:vDash,med:vMed,bkp:vBkp};
+  /* trocar de aba volta ao topo; redesenho da mesma aba mantém onde você está */
+  const mesmaAba=(TAB_ANT===TAB), y=window.scrollY;
   $("#app").innerHTML=views[TAB]();
   $("#nav").innerHTML=TABS.map(([id,ic,lb])=>`<button class="${TAB===id?"on":""}" onclick="TAB='${id}';render()"><span class="ic">${ic}</span>${lb}</button>`).join("");
+  TAB_ANT=TAB;
+  if(mesmaAba&&y>0){
+    if(Math.abs(window.scrollY-y)>1)window.scrollTo(0,y);
+    /* o layout pode assentar num segundo quadro (fontes, gráficos): reconfere */
+    requestAnimationFrame(()=>{if(Math.abs(window.scrollY-y)>1)window.scrollTo(0,y)});
+  }
 }
 window.render=render;window.UI=UI;window.importFile=importFile;window.enviarParaClaude=enviarParaClaude;window.download=download;window.exportPayload=exportPayload;window.todayISO=todayISO;window.normNome=normNome;window.closeModal=closeModal;window.esc=esc;
 render();
 
 /* ===== campo focado visível acima do teclado (iOS) =====
-   Regra: só mexe na rolagem se o campo estiver mesmo encoberto, e mexe
-   uma vez só. A versão anterior recentralizava a cada quadro da animação
-   do teclado, o que fazia a tela tremer. Agora os eventos de resize da
-   visualViewport são debounced: a correção acontece quando o teclado
-   para de se mover, num único scroll suave.                            */
-const FOLGA_BAIXO=72;   /* espaço livre acima do teclado / barra de acessórios */
-const FOLGA_TOPO=58;    /* espaço livre abaixo da barra de progresso fixa      */
-let campoFoco=null, kbConhecida=0, tFoco=null, tQuieto=null;
+   Princípios desta versão:
+   1) o seu dedo manda. Qualquer arrasto trava a correção automática até
+      que outro campo receba foco. Antes, rolar para ver a lista de
+      sugestões era desfeito pelo próprio script;
+   2) o alvo não é só o input: quando há lista de sugestões aberta, ela
+      entra na conta, para nascer visível e não obrigar o arrasto;
+   3) resize só conta quando o teclado realmente mudou de altura. Ajuste
+      de barra do Safari ou aparecimento da barra de acessórios não
+      reposiciona mais nada;
+   4) o preenchimento inferior só cresce enquanto o campo está focado,
+      pois encolher no meio da animação move a âncora e causa tremor.   */
+const FOLGA_BAIXO=76;   /* espaço livre acima do teclado / barra de acessórios */
+const FOLGA_TOPO_MIN=14;
+let campoFoco=null, kbConhecida=0, kbUsada=0, tFoco=null, tQuieto=null, manual=false;
+
 function alturaTeclado(){
   const vv=window.visualViewport;
   return vv?Math.max(0,Math.round(window.innerHeight-vv.height)):0;
@@ -1004,53 +1029,141 @@ function bandaVisivel(){
   const vv=window.visualViewport;
   return vv?{topo:vv.offsetTop,base:vv.offsetTop+vv.height}:{topo:0,base:window.innerHeight};
 }
-/* só cresce enquanto o campo está focado: encolher no meio da animação
-   move a âncora de rolagem e é justamente o que provoca o tremor */
+/* a barra de progresso é sticky no topo: mede a altura real dela */
+function folgaTopo(){
+  const p=document.querySelector(".progwrap");
+  if(!p)return FOLGA_TOPO_MIN;
+  const h=p.getBoundingClientRect().height;
+  return (h>0?h:0)+FOLGA_TOPO_MIN;
+}
+/* lista de sugestões aberta logo abaixo do campo, se houver */
+function sugDoCampo(el){
+  const nx=el&&el.nextElementSibling;
+  if(nx&&nx.classList&&nx.classList.contains("sug")&&nx.offsetHeight>0&&nx.style.display!=="none")return nx;
+  return null;
+}
+/* alvo = campo + lista. "base" é o mínimo que precisa ficar visível (o campo) */
+function alvoDoCampo(el){
+  const r=el.getBoundingClientRect();
+  const sg=sugDoCampo(el);
+  if(!sg)return{topo:r.top,fim:r.bottom,base:r.bottom};
+  const rs=sg.getBoundingClientRect();
+  return{topo:r.top,fim:Math.max(r.bottom,rs.bottom),base:r.bottom};
+}
 function folgaTeclado(kb){
   const app=$("#app");if(!app)return;
-  const alvo=kb>80?kb+120:0, atual=Number(app.dataset.kbpad||0);
+  const alvo=kb>80?kb+140:0, atual=Number(app.dataset.kbpad||0);
   if(alvo>atual+8){app.style.paddingBottom=alvo+"px";app.dataset.kbpad=String(alvo)}
 }
 function ajustarCampo(){
   const el=campoFoco;
+  if(manual)return;
   if(!el||!el.isConnected||document.activeElement!==el)return;
-  const b=bandaVisivel(), r=el.getBoundingClientRect();
+  const b=bandaVisivel(), ft=folgaTopo();
+  const limTopo=b.topo+ft, limBase=b.base-FOLGA_BAIXO;
+  const livre=limBase-limTopo;
+  if(livre<60)return;
+  const a=alvoDoCampo(el);
   let dy=0;
-  if(r.bottom>b.base-FOLGA_BAIXO)      dy=r.bottom-(b.base-FOLGA_BAIXO);   /* atrás do teclado */
-  else if(r.top<b.topo+FOLGA_TOPO)     dy=r.top-(b.topo+FOLGA_TOPO);       /* atrás do cabeçalho */
-  else return;                                                             /* já visível: não mexe */
-  /* campo mais alto que a área livre: encosta o topo dele no limite de cima */
-  const livre=b.base-b.topo-FOLGA_BAIXO-FOLGA_TOPO;
-  if(r.height>livre)dy=r.top-(b.topo+FOLGA_TOPO);
+  if(a.fim-a.topo<=livre){
+    /* campo e lista cabem juntos: rola o mínimo para encaixar o conjunto */
+    if(a.fim>limBase)      dy=a.fim-limBase;
+    else if(a.topo<limTopo)dy=a.topo-limTopo;
+    else return;
+  }else{
+    /* não cabe tudo: encosta o topo do campo no limite de cima e mostra
+       o máximo possível da lista, desde que o campo não fique encoberto */
+    if(a.base>limBase||a.topo<limTopo||a.topo>limTopo+40)dy=a.topo-limTopo;
+    else return;
+  }
   if(Math.abs(dy)<12)return;
-  try{window.scrollBy({top:dy,behavior:"smooth"})}catch(e){window.scrollBy(0,dy)}
+  /* campo dentro de caixa com rolagem própria (modal): rola a caixa,
+     porque mexer na janela não moveria nada e ainda causaria salto */
+  const cx=containerRolavel(el);
+  if(cx){cx.scrollTop=Math.max(0,Math.round(cx.scrollTop+dy));return}
+  const y=Math.max(0,Math.round(window.scrollY+dy));
+  try{window.scrollTo({top:y,behavior:"smooth"})}catch(e){window.scrollTo(0,y)}
 }
+function containerRolavel(el){
+  let p=el&&el.parentElement;
+  while(p&&p!==document.body&&p!==document.documentElement){
+    let ov="";
+    try{ov=(window.getComputedStyle(p).overflowY||"")}catch(e){}
+    if(/auto|scroll/.test(ov)&&p.scrollHeight>p.clientHeight+4)return p;
+    p=p.parentElement;
+  }
+  return null;
+}
+/* reajuste pedido pela digitação: a lista mudou de tamanho.
+   Só age se o campo em si estiver encoberto, para não roubar o seu arrasto. */
+function reajusteLeve(){
+  const el=campoFoco;
+  if(!el||document.activeElement!==el)return;
+  const b=bandaVisivel(), r=el.getBoundingClientRect();
+  /* só age se o próprio campo sumiu de vista; nunca só por causa da lista.
+     Digitar sem enxergar o que se digita é sempre indesejado, então aqui
+     a trava do arrasto é liberada de propósito.                          */
+  if(r.bottom>b.base-FOLGA_BAIXO||r.top<b.topo+folgaTopo()){manual=false;ajustarCampo()}
+}
+window.reajusteLeve=reajusteLeve;
+
 document.addEventListener("focusin",e=>{
   const el=e.target;
   if(!el||(el.tagName!=="INPUT"&&el.tagName!=="TEXTAREA")||el.type==="date")return;
-  campoFoco=el;
+  campoFoco=el;manual=false;   /* novo campo: a correção volta a valer */
   const kb=alturaTeclado();
+  kbUsada=kb;
   folgaTeclado(kb||kbConhecida);
-  clearTimeout(tFoco);
+  clearTimeout(tFoco);clearTimeout(tQuieto);
   /* teclado já aberto (troca de campo): corrige logo. Fechado: espera abrir. */
-  tFoco=setTimeout(ajustarCampo,kb>80?110:430);
+  tFoco=setTimeout(ajustarCampo,kb>80?120:440);
 });
 document.addEventListener("focusout",()=>{
   setTimeout(()=>{
     const a=document.activeElement;
     if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"))return;
-    campoFoco=null;clearTimeout(tFoco);clearTimeout(tQuieto);
+    campoFoco=null;manual=false;clearTimeout(tFoco);clearTimeout(tQuieto);
     const app=$("#app");if(app){app.style.paddingBottom="";app.dataset.kbpad="0"}
-  },160);
+  },260);
+});
+/* o dedo tem prioridade: encostou na tela, o script para de reposicionar */
+["touchstart","touchmove","wheel"].forEach(ev=>{
+  document.addEventListener(ev,()=>{
+    if(!campoFoco)return;
+    manual=true;clearTimeout(tFoco);clearTimeout(tQuieto);
+  },{passive:true});
 });
 if(window.visualViewport)window.visualViewport.addEventListener("resize",()=>{
   const kb=alturaTeclado();
   if(kb>80)kbConhecida=kb;
-  if(!campoFoco)return;
+  folgaTeclado(kb);
+  if(!campoFoco||manual)return;
+  /* barra do Safari, barra de acessórios e afins mudam pouco: ignora */
+  if(Math.abs(kb-kbUsada)<60)return;
+  kbUsada=kb;
   clearTimeout(tFoco);clearTimeout(tQuieto);
   /* espera o teclado parar de se mover antes de corrigir */
-  tQuieto=setTimeout(()=>{folgaTeclado(kb);ajustarCampo()},150);
+  tQuieto=setTimeout(ajustarCampo,160);
 });
+/* toque na lista de sugestões: distingue tap de arrasto.
+   Arrastar em cima da lista rola a tela e não seleciona nada.        */
+let tqSug=null;
+document.addEventListener("touchstart",e=>{
+  const t=e.target, it=t&&t.closest?t.closest(".sugi"):null;
+  const p=e.touches&&e.touches[0];
+  tqSug=(it&&p)?{el:it,x:p.clientX,y:p.clientY,mov:false}:null;
+},{passive:true});
+document.addEventListener("touchmove",e=>{
+  const p=e.touches&&e.touches[0];
+  if(tqSug&&p&&(Math.abs(p.clientX-tqSug.x)>8||Math.abs(p.clientY-tqSug.y)>8))tqSug.mov=true;
+},{passive:true});
+document.addEventListener("touchend",e=>{
+  const s=tqSug;tqSug=null;
+  if(!s||s.mov||!s.el.isConnected)return;
+  e.preventDefault();      /* evita o clique sintético duplicado do iOS */
+  s.el.click();
+},{passive:false});
+document.addEventListener("touchcancel",()=>{tqSug=null},{passive:true});
 </script>
 </body>
 </html>
