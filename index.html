@@ -11,6 +11,14 @@
   --bg:#111310; --card:#1a1d19; --card2:#22261f; --line:#2e332a;
   --tx:#e8e6df; --dim:#9a9a8f; --faint:#6d6d62;
   --amber:#e8a13c; --green:#7fb069; --red:#e05c5c; --blue:#6da3c7;
+  /* SAFE AREA TRAVADA
+     O iOS zera env(safe-area-inset-top) enquanto o teclado esta aberto no
+     modo standalone. Se o layout depender direto do env(), tudo sobe uns
+     50px e o conteudo entra embaixo do relogio. Por isso o valor e medido
+     em JS com o teclado FECHADO e congelado aqui como --sat/--sab. O env()
+     abaixo e so o valor inicial, antes da primeira medicao.             */
+  --sat:env(safe-area-inset-top,0px);
+  --sab:env(safe-area-inset-bottom,0px);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 html,body{background:var(--bg);color:var(--tx);font:15px/1.45 -apple-system,"SF Pro Text",Segoe UI,Roboto,sans-serif;
@@ -28,7 +36,7 @@ html,body{position:fixed;inset:0;width:100%;height:100%;overflow:hidden}
 #app{flex:1 1 auto;min-height:0;width:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
   overscroll-behavior:contain;overflow-anchor:none}
 .num{font-variant-numeric:tabular-nums}
-.wrap{max-width:640px;margin:0 auto;padding:calc(14px + env(safe-area-inset-top)) 14px calc(24px + var(--kb,0px))}
+.wrap{max-width:640px;margin:0 auto;padding:calc(14px + var(--sat)) 14px calc(24px + var(--kb,0px))}
 h1{font-size:20px;font-weight:800}
 .sub{color:var(--faint);font-size:12.5px;margin-top:2px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
@@ -50,7 +58,7 @@ button{background:var(--card2);border:1px solid var(--line);border-radius:10px;c
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}
 .kpi .v{font-size:17px;font-weight:800}
 .kpi .l{color:var(--faint);font-size:11px;margin-top:2px}
-.nav{flex:0 0 auto;background:rgba(20,22,19,.96);backdrop-filter:blur(8px);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+.nav{flex:0 0 auto;background:rgba(20,22,19,.96);backdrop-filter:blur(8px);border-top:1px solid var(--line);display:flex;padding-bottom:var(--sab)}
 /* com o teclado aberto a nav some: o espaco vertical vale mais que ela */
 body.kb .nav{display:none}
 .nav button{flex:1;background:none;border:none;border-radius:0;color:var(--faint);font-size:11.5px;padding:9px 0 7px;display:flex;flex-direction:column;align-items:center;gap:2px}
@@ -80,7 +88,7 @@ svg text{font-family:inherit}
 .sug{display:none;flex-direction:column;gap:4px;margin-top:6px}
 .sugi{text-align:left;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--tx);font-size:14px}
 .sugi small{color:var(--faint)}
-.progwrap{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 8px;margin:calc(-14px - env(safe-area-inset-top,0px)) -14px 6px}
+.progwrap{position:sticky;top:0;z-index:20;background:var(--bg);padding:calc(var(--sat) + 10px) 14px 8px;margin:calc(-14px - var(--sat)) -14px 6px}
 .progbar{height:8px;border-radius:99px;background:var(--card2);border:1px solid var(--line);overflow:hidden}
 .progfill{height:100%;background:var(--green);border-radius:99px;transition:width .3s ease}
 .proglbl{font-size:11.5px;color:var(--faint);margin-top:5px;display:flex;justify-content:space-between}
@@ -1083,11 +1091,38 @@ function alturaTeclado(){
 const tecladoAberto=()=>alturaTeclado()>80;
 const kbAtual=()=>tecladoAberto()?alturaTeclado():kbEstimado;
 
+/* ---- safe area congelada ----
+   Uma sonda invisivel le o valor real de env(safe-area-inset-*) e copia
+   para --sat/--sab. A leitura so acontece com o teclado FECHADO: com ele
+   aberto o iOS devolve 0 e o cabecalho iria parar atras da status bar.
+   Como o CSS usa var(--sat), o ultimo valor bom continua valendo.     */
+let sondaSA=null;
+function medirSafeArea(){
+  if(!sondaSA||!sondaSA.isConnected){
+    sondaSA=document.createElement("div");
+    sondaSA.setAttribute("aria-hidden","true");
+    sondaSA.style.cssText="position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;"+
+      "pointer-events:none;padding-top:env(safe-area-inset-top,0px);"+
+      "padding-bottom:env(safe-area-inset-bottom,0px)";
+    document.body.appendChild(sondaSA);
+  }
+  const cs=getComputedStyle(sondaSA);
+  return {t:Math.round(parseFloat(cs.paddingTop)||0),b:Math.round(parseFloat(cs.paddingBottom)||0)};
+}
+function travarSafeArea(){
+  if(tecladoAberto())return;
+  const m=medirSafeArea(), r=document.documentElement.style;
+  r.setProperty("--sat",m.t+"px");
+  r.setProperty("--sab",m.b+"px");
+}
+window.travarSafeArea=travarSafeArea;
+
 /* unica coisa que o resize faz: reservar o espaco do teclado no fim da
    rolagem e lembrar a altura medida para o proximo foco                */
 function sincronizarViewport(){
   const vv=window.visualViewport;
   const kb=alturaTeclado(), aberto=kb>80;
+  travarSafeArea();
   if(aberto&&Math.abs(kb-kbEstimado)>2){
     kbEstimado=kb;try{localStorage.setItem(KB_KEY,String(kb))}catch(e){}
   }
