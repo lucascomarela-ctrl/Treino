@@ -1065,26 +1065,42 @@ function sugDoCampo(el){
   const nx=el&&el.nextElementSibling;
   return (nx&&nx.classList&&nx.classList.contains("sug")&&nx.offsetHeight>0&&nx.style.display!=="none")?nx:null;
 }
-/* Rola o container o MINIMO necessario, e so quando algo esta mesmo
-   encoberto. Nunca recentraliza por conta propria: e isso que antes
-   desfazia o arrasto do usuario.                                     */
-function revelarFoco(forcar){
-  const el=campoFoco, app=elApp();
-  if(!el||!app||!el.isConnected||document.activeElement!==el)return;
-  if(manual&&!forcar)return;
-  const rc=app.getBoundingClientRect(), r=el.getBoundingClientRect();
-  const limTopo=rc.top+folgaTopo(), limBase=rc.bottom-ACESSORIOS;
-  if(limBase-limTopo<60)return;
-  let dy=0;
-  const sg=sugDoCampo(el);
-  const fim=sg?Math.max(r.bottom,sg.getBoundingClientRect().bottom):r.bottom;
-  if(r.top<limTopo)            dy=r.top-limTopo;            /* atras do cabecalho */
-  else if(r.bottom>limBase)    dy=r.bottom-limBase;         /* atras do teclado   */
-  else if(sg&&fim>limBase){                                  /* lista cortada     */
-    dy=Math.min(fim-limBase, r.top-limTopo);                 /* sem esconder o campo */
-    if(dy<=0)return;
-  }else return;
-  if(Math.abs(dy)<8)return;
+/* faixa util = entre o topo do conteudo (abaixo da barra de progresso)
+   e o topo do teclado (ja descontada a barra de acessorios)           */
+function faixaUtil(){
+  const app=elApp();if(!app)return null;
+  const rc=app.getBoundingClientRect();
+  const topo=rc.top+folgaTopo(), base=rc.bottom-ACESSORIOS;
+  return (base-topo<60)?null:{topo,base,alt:base-topo};
+}
+/* Ao focar, o campo (junto com a lista de sugestoes, se estiver aberta)
+   fica CENTRALIZADO nessa faixa. Depois disso o app nao mexe mais em
+   nada: se o dedo arrastou, a posicao escolhida pelo usuario manda.   */
+function centralizarFoco(){
+  const el=campoFoco, app=elApp(), f=faixaUtil();
+  if(!el||!app||!f||!el.isConnected||document.activeElement!==el)return;
+  if(manual)return;
+  const r=el.getBoundingClientRect(), sg=sugDoCampo(el);
+  const topo=r.top, base=sg?Math.max(r.bottom,sg.getBoundingClientRect().bottom):r.bottom;
+  /* bloco maior que a faixa: encosta o campo no topo em vez de centralizar */
+  const dy=((base-topo)>=f.alt) ? (topo-f.topo) : ((topo+base)/2-(f.topo+f.base)/2);
+  if(Math.abs(dy)<4)return;
+  app.scrollTop=Math.max(0,Math.round(app.scrollTop+dy));
+}
+window.centralizarFoco=centralizarFoco;
+
+/* Correcao MINIMA, usada so quando a lista de sugestoes abre ou cresce
+   durante a digitacao. Nao roda apos arrasto manual.                  */
+function revelarFoco(){
+  const el=campoFoco, app=elApp(), f=faixaUtil();
+  if(!el||!app||!f||!el.isConnected||document.activeElement!==el)return;
+  if(manual)return;
+  const sg=sugDoCampo(el);if(!sg)return;
+  const r=el.getBoundingClientRect();
+  const fim=Math.max(r.bottom,sg.getBoundingClientRect().bottom);
+  if(fim<=f.base)return;
+  const dy=Math.min(fim-f.base, r.top-f.topo);   /* sem esconder o proprio campo */
+  if(dy<8)return;
   app.scrollTop=Math.max(0,Math.round(app.scrollTop+dy));
 }
 window.revelarFoco=revelarFoco;
@@ -1093,8 +1109,9 @@ window.revelarFoco=revelarFoco;
 if(window.visualViewport){
   window.visualViewport.addEventListener("resize",()=>{
     sincronizarViewport();
-    /* cada etapa de abertura do teclado reconfere, sem depender de timing */
-    clearTimeout(tRevela);tRevela=setTimeout(()=>revelarFoco(true),60);
+    /* cada etapa de abertura do teclado reconfere a centralizacao,
+       mas apenas enquanto o usuario nao arrastou a tela              */
+    clearTimeout(tRevela);tRevela=setTimeout(centralizarFoco,60);
   });
   window.visualViewport.addEventListener("scroll",sincronizarViewport);
 }
@@ -1107,9 +1124,9 @@ document.addEventListener("focusin",e=>{
   campoFoco=el;manual=false;
   sincronizarViewport();
   clearTimeout(tRevela);
-  /* revela agora e de novo quando o teclado terminar de subir */
-  revelarFoco(true);
-  tRevela=setTimeout(()=>revelarFoco(true),320);
+  /* centraliza agora e confirma quando o teclado terminar de subir */
+  centralizarFoco();
+  tRevela=setTimeout(centralizarFoco,320);
 });
 document.addEventListener("focusout",()=>{
   setTimeout(()=>{
@@ -1119,10 +1136,22 @@ document.addEventListener("focusout",()=>{
     sincronizarViewport();
   },120);
 });
-/* o dedo tem prioridade: durante o arrasto o app nao reposiciona nada */
-["touchstart","touchmove"].forEach(ev=>document.addEventListener(ev,()=>{
-  if(campoFoco)manual=true;
-},{passive:true}));
+/* O dedo tem prioridade: a partir do primeiro arrasto de verdade o app
+   nao reposiciona mais nada ate um novo foco. Um toque simples (tocar
+   num item da lista de sugestoes, por exemplo) nao conta como arrasto. */
+let yToque=null;
+document.addEventListener("touchstart",e=>{
+  const p=e.touches&&e.touches[0];yToque=p?p.clientY:null;
+},{passive:true});
+document.addEventListener("touchmove",e=>{
+  const p=e.touches&&e.touches[0];
+  if(campoFoco&&p&&yToque!==null&&Math.abs(p.clientY-yToque)>6){manual=true;clearTimeout(tRevela);}
+},{passive:true});
+/* lista de sugestoes abriu/cresceu enquanto digita: revela so o que falta */
+document.addEventListener("input",e=>{
+  if(!campoFoco||e.target!==campoFoco||manual)return;
+  clearTimeout(tRevela);tRevela=setTimeout(revelarFoco,40);
+});
 
 /* toque na lista de sugestoes: arrastar rola, tocar seleciona */
 let tqSug=null;
