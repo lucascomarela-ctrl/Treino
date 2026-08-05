@@ -78,10 +78,16 @@ svg text{font-family:inherit}
 .sug{display:none;flex-direction:column;gap:4px;margin-top:6px}
 .sugi{text-align:left;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--tx);font-size:14px}
 .sugi small{color:var(--faint)}
-.progwrap{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 8px;margin:calc(-14px - env(safe-area-inset-top,0px)) -14px 6px}
+/* A barra vive FORA da area de rolagem (#progtop, filho direto do #shell).
+   Assim ela nunca sobrepoe conteudo nem depende de margens negativas.     */
+#progtop{flex:0 0 auto;background:var(--bg)}
+#progtop:empty{display:none}
+.progwrap{max-width:640px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 9px;border-bottom:1px solid var(--line)}
 .progbar{height:8px;border-radius:99px;background:var(--card2);border:1px solid var(--line);overflow:hidden}
 .progfill{height:100%;background:var(--green);border-radius:99px;transition:width .3s ease}
 .proglbl{font-size:11.5px;color:var(--faint);margin-top:5px;display:flex;justify-content:space-between}
+/* com a faixa no topo, a area segura ja foi consumida por ela */
+body.prog #app{padding-top:12px}
 .card.done{border-color:#3c5a38;background:#171c15;padding:12px 14px}
 .done-head{display:flex;align-items:center;gap:8px}
 .done-head b{flex:1;font-size:14.5px}
@@ -134,6 +140,7 @@ svg text{font-family:inherit}
 </head>
 <body>
 <div id="shell">
+  <div id="progtop"></div>
   <div class="wrap" id="app"></div>
   <nav class="nav" id="nav"></nav>
 </div>
@@ -494,6 +501,15 @@ let UI={
 function novoTreinoVazio(){return{data:todayISO(),academia:gymOptions()[0]||"",treinoNome:"",exercicios:[]}}
 
 /* ============================ aba Treino ============================ */
+/* Barra de progresso: renderizada na faixa fixa #progtop, fora da rolagem. */
+function progressoHTML(){
+  if(TAB!=="treino"||!UI.novo)return "";
+  const ex=UI.novo.exercicios||[], totEx=ex.length;
+  if(!totEx)return "";
+  const doneEx=ex.filter(e=>e.done).length, pct=Math.round(doneEx/totEx*100);
+  return `<div class="progwrap"><div class="progbar"><div class="progfill" style="width:${pct}%"></div></div>
+    <div class="proglbl num"><span>${doneEx}/${totEx} exercícios concluídos</span><span>${pct}%</span></div></div>`;
+}
 function ultimaVez(nome){
   for(const s of [...DB.sessions].sort((a,b)=>b.data.localeCompare(a.data)))
     for(const ex of (s.exercicios||[]))if(ex.nome===nome&&(ex.sets||[]).length)return{data:s.data,sets:ex.sets};
@@ -509,9 +525,7 @@ function vTreino(){
   const totEx=n.exercicios.length;
   const doneEx=n.exercicios.filter(ex=>ex.done).length;
   const pct=totEx?Math.round(doneEx/totEx*100):0;
-  let h=`${totEx?`<div class="progwrap"><div class="progbar"><div class="progfill" style="width:${pct}%"></div></div>
-    <div class="proglbl num"><span>${doneEx}/${totEx} exercícios concluídos</span><span>${pct}%</span></div></div>`:""}
-  <h1>Registrar treino</h1>
+  let h=`<h1>Registrar treino</h1>
   <div class="sub num">${efet} séries efetivas · ${fmtT(ton)}</div>
   <div class="card">
     <span class="lbl">Data</span><input type="date" value="${n.data}" onchange="UI.novo.data=this.value">
@@ -1007,6 +1021,8 @@ function render(){
   /* trocar de aba volta ao topo; redesenhar a mesma aba mantem onde voce esta */
   const mesmaAba=(TAB_ANT===TAB), y=app?app.scrollTop:0;
   app.innerHTML=views[TAB]();
+  const pt=$("#progtop");
+  if(pt){pt.innerHTML=progressoHTML();document.body.classList.toggle("prog",!!pt.innerHTML)}
   $("#nav").innerHTML=TABS.map(([id,ic,lb])=>`<button class="${TAB===id?"on":""}" onclick="TAB='${id}';render()"><span class="ic">${ic}</span>${lb}</button>`).join("");
   TAB_ANT=TAB;
   app.scrollTop = mesmaAba ? y : 0;
@@ -1055,12 +1071,9 @@ function sincronizarViewport(){
 }
 window.sincronizarViewport=sincronizarViewport;
 
-/* barra de progresso e sticky no topo do container: desconta a altura dela */
-function folgaTopo(){
-  const p=document.querySelector(".progwrap");
-  const h=p?p.getBoundingClientRect().height:0;
-  return (h>0?h:0)+FOLGA_TOPO_MIN;
-}
+/* a barra de progresso agora fica fora da area rolavel: o topo do #app ja
+   comeca abaixo dela, entao basta uma folga visual minima */
+function folgaTopo(){ return FOLGA_TOPO_MIN; }
 function sugDoCampo(el){
   const nx=el&&el.nextElementSibling;
   return (nx&&nx.classList&&nx.classList.contains("sug")&&nx.offsetHeight>0&&nx.style.display!=="none")?nx:null;
