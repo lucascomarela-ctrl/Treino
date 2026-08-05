@@ -1029,6 +1029,7 @@ render();
       de acertar o instante certo: qualquer etapa fica correta.        */
 const ACESSORIOS=52;     /* faixa reservada acima do teclado */
 const FOLGA_TOPO_MIN=12;
+const FOLGA_BASE=24;     /* respiro minimo entre o campo e a barra do teclado */
 let campoFoco=null, manual=false, tRevela=null;
 
 const elShell=()=>document.getElementById("shell");
@@ -1045,9 +1046,11 @@ function sincronizarViewport(){
   const h=Math.round(vv?vv.height:window.innerHeight);
   const kb=alturaTeclado(), comTeclado=kb>80;
   sh.style.height=h+"px";
-  /* a pagina nunca deve rolar; se o Safari deslocar, volta ao lugar */
-  if(vv&&vv.offsetTop>0)sh.style.top=Math.round(vv.offsetTop)+"px";
-  else sh.style.top="0px";
+  /* O shell fica SEMPRE colado no topo. O offsetTop do visualViewport fica
+     positivo durante a animacao do teclado no iOS e, quando esse valor
+     resta aplicado, o app inteiro desce e a barra de progresso vai parar
+     no meio da tela. A pagina nao rola, entao top=0 e sempre correto.  */
+  sh.style.top="0px";
   document.documentElement.style.setProperty("--vvh",h+"px");
   document.documentElement.style.setProperty("--acess",comTeclado?ACESSORIOS+"px":"0px");
   document.body.classList.toggle("kb",comTeclado);
@@ -1082,8 +1085,19 @@ function centralizarFoco(){
   if(manual)return;
   const r=el.getBoundingClientRect(), sg=sugDoCampo(el);
   const topo=r.top, base=sg?Math.max(r.bottom,sg.getBoundingClientRect().bottom):r.bottom;
-  /* bloco maior que a faixa: encosta o campo no topo em vez de centralizar */
-  const dy=((base-topo)>=f.alt) ? (topo-f.topo) : ((topo+base)/2-(f.topo+f.base)/2);
+  let dy;
+  if(topo>=f.topo&&base<=f.base){
+    /* ja esta inteiro visivel: nao recentraliza, no maximo sobe o tanto
+       necessario para nao ficar espremido na barra do teclado          */
+    dy=base-(f.base-FOLGA_BASE);
+    if(dy<=0)return;
+    dy=Math.min(dy,topo-f.topo);          /* nunca esconde o campo no topo */
+    if(dy<4)return;
+  }else if((base-topo)>=f.alt){
+    dy=topo-f.topo;                        /* bloco maior que a faixa */
+  }else{
+    dy=(topo+base)/2-(f.topo+f.base)/2;    /* encoberto: centraliza */
+  }
   if(Math.abs(dy)<4)return;
   app.scrollTop=Math.max(0,Math.round(app.scrollTop+dy));
 }
