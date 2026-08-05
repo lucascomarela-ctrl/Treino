@@ -11,32 +11,22 @@
   --bg:#111310; --card:#1a1d19; --card2:#22261f; --line:#2e332a;
   --tx:#e8e6df; --dim:#9a9a8f; --faint:#6d6d62;
   --amber:#e8a13c; --green:#7fb069; --red:#e05c5c; --blue:#6da3c7;
-  /* SAFE AREA TRAVADA
-     O iOS zera env(safe-area-inset-top) enquanto o teclado esta aberto no
-     modo standalone. Se o layout depender direto do env(), tudo sobe uns
-     50px e o conteudo entra embaixo do relogio. Por isso o valor e medido
-     em JS com o teclado FECHADO e congelado aqui como --sat/--sab. O env()
-     abaixo e so o valor inicial, antes da primeira medicao.             */
-  --sat:env(safe-area-inset-top,0px);
-  --sab:env(safe-area-inset-bottom,0px);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 html,body{background:var(--bg);color:var(--tx);font:15px/1.45 -apple-system,"SF Pro Text",Segoe UI,Roboto,sans-serif;
   -webkit-text-size-adjust:100%;text-size-adjust:100%;overscroll-behavior:none}
 /* ARQUITETURA DE VIEWPORT
-   O layout NUNCA muda de tamanho. O #shell ocupa a tela inteira e fica
-   preso no topo, entao cabecalho e barra de progresso nao saem do lugar
-   quando o teclado abre ou fecha. O espaco do teclado entra apenas como
-   padding no fim da area de rolagem (--kb): aumenta o quanto da pra
-   rolar sem deslocar nada que ja esta visivel. Isso elimina o reflow que
-   antes acontecia a cada etapa da animacao do teclado.                 */
+   A pagina em si nao rola. O #shell tem a altura exata da area visivel
+   (visualViewport), que encolhe sozinha quando o teclado sobe, e o unico
+   elemento com rolagem e o #app. Assim nenhum campo pode ficar atras do
+   teclado, e nao existe mais "corrigir a posicao depois" via JS.        */
 html,body{position:fixed;inset:0;width:100%;height:100%;overflow:hidden}
-#shell{position:fixed;left:0;right:0;top:0;bottom:0;
+#shell{position:absolute;left:0;right:0;top:0;height:100%;
   display:flex;flex-direction:column;overflow:hidden}
 #app{flex:1 1 auto;min-height:0;width:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
-  overscroll-behavior:contain;overflow-anchor:none}
+  overscroll-behavior:contain;scroll-padding-bottom:var(--acess,0px)}
 .num{font-variant-numeric:tabular-nums}
-.wrap{max-width:640px;margin:0 auto;padding:calc(14px + var(--sat)) 14px calc(24px + var(--kb,0px))}
+.wrap{max-width:640px;margin:0 auto;padding:calc(14px + env(safe-area-inset-top)) 14px calc(24px + var(--acess,0px))}
 h1{font-size:20px;font-weight:800}
 .sub{color:var(--faint);font-size:12.5px;margin-top:2px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
@@ -58,7 +48,7 @@ button{background:var(--card2);border:1px solid var(--line);border-radius:10px;c
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}
 .kpi .v{font-size:17px;font-weight:800}
 .kpi .l{color:var(--faint);font-size:11px;margin-top:2px}
-.nav{flex:0 0 auto;background:rgba(20,22,19,.96);backdrop-filter:blur(8px);border-top:1px solid var(--line);display:flex;padding-bottom:var(--sab)}
+.nav{flex:0 0 auto;background:rgba(20,22,19,.96);backdrop-filter:blur(8px);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
 /* com o teclado aberto a nav some: o espaco vertical vale mais que ela */
 body.kb .nav{display:none}
 .nav button{flex:1;background:none;border:none;border-radius:0;color:var(--faint);font-size:11.5px;padding:9px 0 7px;display:flex;flex-direction:column;align-items:center;gap:2px}
@@ -88,7 +78,7 @@ svg text{font-family:inherit}
 .sug{display:none;flex-direction:column;gap:4px;margin-top:6px}
 .sugi{text-align:left;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--tx);font-size:14px}
 .sugi small{color:var(--faint)}
-.progwrap{position:sticky;top:0;z-index:20;background:var(--bg);padding:calc(var(--sat) + 10px) 14px 8px;margin:calc(-14px - var(--sat)) -14px 6px}
+.progwrap{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 8px;margin:calc(-14px - env(safe-area-inset-top,0px)) -14px 6px}
 .progbar{height:8px;border-radius:99px;background:var(--card2);border:1px solid var(--line);overflow:hidden}
 .progfill{height:100%;background:var(--green);border-radius:99px;transition:width .3s ease}
 .proglbl{font-size:11.5px;color:var(--faint);margin-top:5px;display:flex;justify-content:space-between}
@@ -250,44 +240,6 @@ const PATCHES=[{
       tD.exercicios.push({nome:"Flexão de Punho Barra Sentado",esquema:"10x20",tecnica:"GVT"});
     }
     return novas.length;
-  }
-},{
-  /* ==== plano vigente: Push / Pull / Perna (agosto/2026) ====
-     Substitui o mesociclo 3x20 pelos tres ultimos treinos realmente
-     realizados (02, 03 e 04/08/2026). O esquema de cada exercicio vem
-     do que foi registrado nessas sessoes: numero de series efetivas e a
-     repeticao mais frequente delas.                                   */
-  id:"plano-ppl-2026-08",
-  aplicar(){
-    const ex=(nome,esquema)=>({id:"e"+uid(),nome,esquema,tecnica:""});
-    DB.plan={nome:"Push/Pull/Perna (agosto/2026)",atualizadoEm:"2026-08-04",treinos:[
-      {id:"t-ppl-a",nome:"Treino A: Perna",exercicios:[
-        ex("Agachamento Smith","3x10"),
-        ex("Stiff","3x10"),
-        ex("Cadeira Extensora","6x8"),
-        ex("Cadeira Adutora","6x10"),
-        ex("Cadeira Abdutora","6x12"),
-        ex("Gêmeos Sentado Máquina","6x15"),
-        ex("Gêmeos Em Pé Máquina","6x12")]},
-      {id:"t-ppl-b",nome:"Treino B: Push",exercicios:[
-        ex("Cross-Over Polia Alta","4x8"),
-        ex("Supino Inclinado Halteres","4x12"),
-        ex("Supino reto máquina","6x10"),
-        ex("Desenvolvimento Máquina","4x8"),
-        ex("Elevação lateral halteres","6x12"),
-        ex("Tríceps corda","4x10"),
-        ex("Tríceps Francês na Polia com Corda","7x6"),
-        ex("Prancha","5x60")]},
-      {id:"t-ppl-c",nome:"Treino C: Pull",exercicios:[
-        ex("Remada Alta","4x12"),
-        ex("Puxada Neutra Barra","4x10"),
-        ex("Pullover","4x12"),
-        ex("Rosca Banco","4x8"),
-        ex("Rosca Scott","4x8"),
-        ex("Encolhimento Halteres","6x8"),
-        ex("Crussifuxo invertido halteres","4x12")]}
-    ]};
-    return 1;
   }
 }];
 function aplicarPatches(){
@@ -1063,77 +1015,47 @@ window.render=render;window.UI=UI;window.importFile=importFile;window.enviarPara
 render();
 
 /* ================= viewport e teclado =================
-   Regra desta versao: nada muda de tamanho quando o teclado abre. O
-   #shell ja ocupa a tela inteira e fica preso no topo, logo a barra de
-   progresso e o cabecalho ficam sempre no mesmo lugar. O espaco do
-   teclado entra so como padding no fim da rolagem (--kb).
+   Nesta arquitetura o JS nao "corrige rolagem". Ele so mantem o #shell
+   com a altura exata da area visivel. Quando o teclado sobe, a area de
+   rolagem encolhe e todo o conteudo continua alcancavel acima dele.
 
-   O campo em foco e reposicionado UMA unica vez, no instante do foco, ja
-   usando a altura de teclado conhecida (memorizada da ultima abertura).
-   Como depois disso nenhum elemento muda de tamanho, some o efeito de
-   "desce e depois sobe" que existia quando a altura do shell era
-   recalculada a cada etapa da animacao do teclado. O ajuste tambem e
-   sempre o MINIMO necessario: se o campo ja esta visivel, nada rola.  */
-const ACESSORIOS=52;      /* barra de sugestoes/preenchimento do iOS */
+   Duas coisas o visualViewport nao resolve sozinho e por isso sao
+   tratadas aqui:
+   a) a barra de acessorios do iOS ("Preencher Automaticamente" / sugestoes
+      de teclados como o SwiftKey) fica POR CIMA da area visivel e nem
+      sempre entra na conta. Reservamos um espaco fixo para ela;
+   b) teclados de terceiros abrem em duas etapas de altura. Como aqui cada
+      etapa apenas reajusta a altura do shell, nao existe mais o problema
+      de acertar o instante certo: qualquer etapa fica correta.        */
+const ACESSORIOS=52;     /* faixa reservada acima do teclado */
 const FOLGA_TOPO_MIN=12;
-const FOLGA_BASE=20;      /* respiro entre o campo e a barra do teclado */
-const KB_KEY="gym-kb-altura";
-let kbEstimado=336;       /* iPhone tipico; trocado pela medida real */
-try{const v=Number(localStorage.getItem(KB_KEY));if(v>120&&v<600)kbEstimado=v}catch(e){}
-let campoFoco=null, manual=false, tAjuste=null;
+let campoFoco=null, manual=false, tRevela=null;
 
+const elShell=()=>document.getElementById("shell");
 const elApp=()=>document.getElementById("app");
+
 function alturaTeclado(){
   const vv=window.visualViewport;
-  if(!vv)return 0;
-  return Math.max(0,Math.round(window.innerHeight-vv.height-vv.offsetTop));
+  return vv?Math.max(0,Math.round(window.innerHeight-vv.height)):0;
 }
-const tecladoAberto=()=>alturaTeclado()>80;
-const kbAtual=()=>tecladoAberto()?alturaTeclado():kbEstimado;
-
-/* ---- safe area congelada ----
-   Uma sonda invisivel le o valor real de env(safe-area-inset-*) e copia
-   para --sat/--sab. A leitura so acontece com o teclado FECHADO: com ele
-   aberto o iOS devolve 0 e o cabecalho iria parar atras da status bar.
-   Como o CSS usa var(--sat), o ultimo valor bom continua valendo.     */
-let sondaSA=null;
-function medirSafeArea(){
-  if(!sondaSA||!sondaSA.isConnected){
-    sondaSA=document.createElement("div");
-    sondaSA.setAttribute("aria-hidden","true");
-    sondaSA.style.cssText="position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;"+
-      "pointer-events:none;padding-top:env(safe-area-inset-top,0px);"+
-      "padding-bottom:env(safe-area-inset-bottom,0px)";
-    document.body.appendChild(sondaSA);
-  }
-  const cs=getComputedStyle(sondaSA);
-  return {t:Math.round(parseFloat(cs.paddingTop)||0),b:Math.round(parseFloat(cs.paddingBottom)||0)};
-}
-function travarSafeArea(){
-  if(tecladoAberto())return;
-  const m=medirSafeArea(), r=document.documentElement.style;
-  r.setProperty("--sat",m.t+"px");
-  r.setProperty("--sab",m.b+"px");
-}
-window.travarSafeArea=travarSafeArea;
-
-/* unica coisa que o resize faz: reservar o espaco do teclado no fim da
-   rolagem e lembrar a altura medida para o proximo foco                */
+/* unica funcao que mexe no layout: iguala o shell a area visivel */
 function sincronizarViewport(){
-  const vv=window.visualViewport;
-  const kb=alturaTeclado(), aberto=kb>80;
-  travarSafeArea();
-  if(aberto&&Math.abs(kb-kbEstimado)>2){
-    kbEstimado=kb;try{localStorage.setItem(KB_KEY,String(kb))}catch(e){}
-  }
-  document.documentElement.style.setProperty("--kb",aberto?(kb+ACESSORIOS)+"px":"0px");
-  document.documentElement.style.setProperty("--vvh",Math.round(vv?vv.height:window.innerHeight)+"px");
-  document.body.classList.toggle("kb",aberto);
+  const vv=window.visualViewport, sh=elShell(), app=elApp();
+  if(!sh)return;
+  const h=Math.round(vv?vv.height:window.innerHeight);
+  const kb=alturaTeclado(), comTeclado=kb>80;
+  sh.style.height=h+"px";
+  /* a pagina nunca deve rolar; se o Safari deslocar, volta ao lugar */
+  if(vv&&vv.offsetTop>0)sh.style.top=Math.round(vv.offsetTop)+"px";
+  else sh.style.top="0px";
+  document.documentElement.style.setProperty("--vvh",h+"px");
+  document.documentElement.style.setProperty("--acess",comTeclado?ACESSORIOS+"px":"0px");
+  document.body.classList.toggle("kb",comTeclado);
   if(window.scrollY!==0){try{window.scrollTo(0,0)}catch(e){}}
 }
 window.sincronizarViewport=sincronizarViewport;
 
-/* a barra de progresso e sticky no topo do container: desconta a altura dela */
+/* barra de progresso e sticky no topo do container: desconta a altura dela */
 function folgaTopo(){
   const p=document.querySelector(".progwrap");
   const h=p?p.getBoundingClientRect().height:0;
@@ -1143,35 +1065,36 @@ function sugDoCampo(el){
   const nx=el&&el.nextElementSibling;
   return (nx&&nx.classList&&nx.classList.contains("sug")&&nx.offsetHeight>0&&nx.style.display!=="none")?nx:null;
 }
-/* Move o minimo possivel: sobe se o campo estiver atras do teclado,
-   desce se estiver atras da barra de progresso, e nao faz nada quando
-   ja da pra ver. Sem centralizar, que era o que dava o pulo grande.   */
-function ajustarFoco(kb){
+/* Rola o container o MINIMO necessario, e so quando algo esta mesmo
+   encoberto. Nunca recentraliza por conta propria: e isso que antes
+   desfazia o arrasto do usuario.                                     */
+function revelarFoco(forcar){
   const el=campoFoco, app=elApp();
-  if(!el||!app||manual||!el.isConnected||document.activeElement!==el)return;
-  const rc=app.getBoundingClientRect();
-  const topo=rc.top+folgaTopo();
-  const base=Math.min(rc.bottom,window.innerHeight-(kb||0)-ACESSORIOS)-FOLGA_BASE;
-  if(base-topo<60)return;
-  const r=el.getBoundingClientRect(), sg=sugDoCampo(el);
-  const fim=sg?Math.max(r.bottom,sg.getBoundingClientRect().bottom):r.bottom;
+  if(!el||!app||!el.isConnected||document.activeElement!==el)return;
+  if(manual&&!forcar)return;
+  const rc=app.getBoundingClientRect(), r=el.getBoundingClientRect();
+  const limTopo=rc.top+folgaTopo(), limBase=rc.bottom-ACESSORIOS;
+  if(limBase-limTopo<60)return;
   let dy=0;
-  if(fim>base)dy=Math.min(fim-base,Math.max(0,r.top-topo));  /* sobe o minimo */
-  else if(r.top<topo)dy=r.top-topo;                          /* desce o minimo */
-  if(Math.abs(dy)<4)return;
+  const sg=sugDoCampo(el);
+  const fim=sg?Math.max(r.bottom,sg.getBoundingClientRect().bottom):r.bottom;
+  if(r.top<limTopo)            dy=r.top-limTopo;            /* atras do cabecalho */
+  else if(r.bottom>limBase)    dy=r.bottom-limBase;         /* atras do teclado   */
+  else if(sg&&fim>limBase){                                  /* lista cortada     */
+    dy=Math.min(fim-limBase, r.top-limTopo);                 /* sem esconder o campo */
+    if(dy<=0)return;
+  }else return;
+  if(Math.abs(dy)<8)return;
   app.scrollTop=Math.max(0,Math.round(app.scrollTop+dy));
 }
-window.ajustarFoco=ajustarFoco;
-/* nomes antigos mantidos: o HTML gerado chama revelarFoco ao sugerir */
-window.revelarFoco=()=>ajustarFoco(kbAtual());
-window.centralizarFoco=window.revelarFoco;
+window.revelarFoco=revelarFoco;
 
 /* ---- eventos ---- */
 if(window.visualViewport){
   window.visualViewport.addEventListener("resize",()=>{
     sincronizarViewport();
-    /* so confere; se o campo ja esta visivel o ajuste e zero */
-    clearTimeout(tAjuste);tAjuste=setTimeout(()=>ajustarFoco(kbAtual()),90);
+    /* cada etapa de abertura do teclado reconfere, sem depender de timing */
+    clearTimeout(tRevela);tRevela=setTimeout(()=>revelarFoco(true),60);
   });
   window.visualViewport.addEventListener("scroll",sincronizarViewport);
 }
@@ -1182,35 +1105,24 @@ document.addEventListener("focusin",e=>{
   const el=e.target;
   if(!el||(el.tagName!=="INPUT"&&el.tagName!=="TEXTAREA"&&el.tagName!=="SELECT"))return;
   campoFoco=el;manual=false;
-  /* posiciona ja contando com o teclado que esta subindo: um movimento so */
-  ajustarFoco(kbAtual());
-  clearTimeout(tAjuste);
-  tAjuste=setTimeout(()=>ajustarFoco(kbAtual()),360);
+  sincronizarViewport();
+  clearTimeout(tRevela);
+  /* revela agora e de novo quando o teclado terminar de subir */
+  revelarFoco(true);
+  tRevela=setTimeout(()=>revelarFoco(true),320);
 });
 document.addEventListener("focusout",()=>{
   setTimeout(()=>{
     const a=document.activeElement;
     if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"||a.tagName==="SELECT"))return;
-    campoFoco=null;manual=false;clearTimeout(tAjuste);
+    campoFoco=null;manual=false;clearTimeout(tRevela);
     sincronizarViewport();
   },120);
 });
-/* O dedo tem prioridade: a partir do primeiro arrasto de verdade o app
-   nao reposiciona mais nada ate um novo foco. Um toque simples (tocar
-   num item da lista de sugestoes, por exemplo) nao conta como arrasto. */
-let yToque=null;
-document.addEventListener("touchstart",e=>{
-  const p=e.touches&&e.touches[0];yToque=p?p.clientY:null;
-},{passive:true});
-document.addEventListener("touchmove",e=>{
-  const p=e.touches&&e.touches[0];
-  if(campoFoco&&p&&yToque!==null&&Math.abs(p.clientY-yToque)>6){manual=true;clearTimeout(tAjuste);}
-},{passive:true});
-/* lista de sugestoes abriu/cresceu enquanto digita: revela so o que falta */
-document.addEventListener("input",e=>{
-  if(!campoFoco||e.target!==campoFoco||manual)return;
-  clearTimeout(tAjuste);tAjuste=setTimeout(()=>ajustarFoco(kbAtual()),40);
-});
+/* o dedo tem prioridade: durante o arrasto o app nao reposiciona nada */
+["touchstart","touchmove"].forEach(ev=>document.addEventListener(ev,()=>{
+  if(campoFoco)manual=true;
+},{passive:true}));
 
 /* toque na lista de sugestoes: arrastar rola, tocar seleciona */
 let tqSug=null;
