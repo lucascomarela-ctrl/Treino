@@ -636,27 +636,35 @@ window.aplicarConclusao=ei=>{
   ex.done=true;render();
   if(UI.novo.exercicios.length&&UI.novo.exercicios.every(e=>e.done))setTimeout(mostrarResumo,80);
 };
-window.mostrarResumo=()=>{
+/* Tela unica de revisao: serve tanto para o fim automatico do treino
+   (auto=true, quando todos os exercicios sao concluidos) quanto para o
+   botao "Salvar sessao". Antes eram dois modais quase identicos. */
+window.revisarSessao=(auto)=>{
   const n=UI.novo;if(!n)return;
-  const exs=limparSessao(n);if(!exs.length)return;
-  const sess={data:n.data,academia:n.academia,treinoNome:n.treinoNome,exercicios:exs};
+  const exs=limparSessao(n);
+  if(!exs.length){if(!auto)flash("Adicione ao menos um exercício com séries");return}
+  const sess={id:`s-${n.data}-${uid().slice(0,4)}`,data:n.data,academia:n.academia,treinoNome:n.treinoNome,exercicios:exs};
   const ant=sessaoAnterior(sess.treinoNome,sess.data);
   const ton=tonelagemSessao(sess), tonAnt=ant?tonelagemSessao(ant):0, delta=ant?ton-tonAnt:null;
   const efet=exs.reduce((a,ex)=>a+ex.sets.filter(x=>!x.warm).length,0);
   const linhasG=linhasGrupos(sess,ant);
-  openModal(`<div class="big">💪</div>
-    <h2 style="text-align:center">Treino concluído!</h2>
-    <div class="sub" style="text-align:center">${esc(sess.treinoNome||"Sessão")} · ${brDate(sess.data)}</div>
+  const semNome=!String(n.treinoNome||"").trim(), semAcad=!String(n.academia||"").trim();
+  openModal(`${auto?`<div class="big">💪</div>`:""}
+    <h2 style="text-align:center">${auto?"Treino concluído!":"Conferir e salvar"}</h2>
+    <div class="sub" style="text-align:center">${esc(sess.treinoNome||"Sessão")} · ${brDate(sess.data)}${semAcad?"":` · ${esc(sess.academia)}`}</div>
     <div style="margin-top:14px">
       <div class="mrow"><span>Exercícios</span><b class="num">${exs.length}</b></div>
       <div class="mrow"><span>Séries efetivas</span><b class="num">${efet}</b></div>
       <div class="mrow"><span>Tonelagem</span><b class="num">${fmtT(ton)}</b></div>
       ${ant?`<div class="mrow"><span>vs. ${brDate(ant.data)}</span><b class="num" style="color:${delta>=0?"var(--green)":"var(--red)"}">${delta>=0?"▲ +":"▼ "}${fmtT(Math.abs(delta))}</b></div>`:""}
     </div>
-    ${linhasG?`<div class="gsec"><div class="gt">Volume por grupamento${ant?` · vs. ${brDate(ant.data)}`:""}</div>${linhasG}</div>`:""}`,
-    [{label:"Continuar editando",cls:"btn-g",esc:true},
-     {label:"Salvar sessão",cls:"btn-p",fn:()=>salvarSessao()}]);
+    ${linhasG?`<div class="gsec"><div class="gt">Volume por grupamento${ant?` · vs. ${brDate(ant.data)}`:""}</div>${linhasG}</div>`:""}
+    ${semNome||semAcad?`<div class="pr">⚠ ${[semNome?"sem nome do treino":"",semAcad?"sem academia":""].filter(Boolean).join(" e ")}. Dá pra salvar assim, mas o histórico fica mais pobre.</div>`:""}`,
+    [{label:auto?"Continuar editando":"Voltar",cls:"btn-g",esc:true},
+     {label:"Salvar sessão",cls:"btn-p",fn:()=>confirmarSalvar(sess)}]);
 };
+window.mostrarResumo=()=>revisarSessao(true);
+window.salvarSessao=()=>revisarSessao(false);
 window.copiarRef=ei=>{const ex=UI.novo.exercicios[ei];const ref=ultimaVez(ex.nome);if(ref){const s=ref.sets.filter(x=>!x.warm);if(s.length){ex.sets=s.map(x=>({carga:String(x.carga),reps:String(x.reps),warm:false,ok:false}))}render()}};
 window.addSet=ei=>{const sets=UI.novo.exercicios[ei].sets;const last=sets[sets.length-1];sets.push(last?{...last,warm:false,ok:false}:{carga:"",reps:"",warm:false,ok:false});render()};
 /* melhor e1RM histórico de um exercício, ignorando as sessões informadas */
@@ -676,28 +684,6 @@ function limparSessao(n){
     .map(ex=>({nome:canonNome(ex.nome,n.treinoNome),sets:ex.sets.filter(x=>x.carga!==""||x.reps!=="").map(x=>({carga:Number(x.carga)||0,reps:Number(x.reps)||0,warm:!!x.warm}))}))
     .filter(ex=>ex.nome&&ex.sets.length);
 }
-window.salvarSessao=()=>{
-  const n=UI.novo;
-  const exs=limparSessao(n);
-  if(!exs.length){flash("Adicione ao menos um exercício com séries");return}
-  const sess={id:`s-${n.data}-${uid().slice(0,4)}`,data:n.data,academia:n.academia,treinoNome:n.treinoNome,exercicios:exs};
-  const efet=exs.reduce((a,ex)=>a+ex.sets.filter(x=>!x.warm).length,0);
-  const ton=tonelagemSessao(sess);
-  const semNome=!String(n.treinoNome||"").trim(), semAcad=!String(n.academia||"").trim();
-  openModal(`<h2>Conferir e salvar</h2>
-    <div class="sub">Revise antes de gravar no histórico.</div>
-    <div style="margin-top:12px">
-      <div class="mrow"><span>Data</span><b class="num">${brDate(n.data)}</b></div>
-      <div class="mrow"><span>Academia</span><b>${esc(n.academia||"—")}</b></div>
-      <div class="mrow"><span>Treino</span><b>${esc(n.treinoNome||"—")}</b></div>
-      <div class="mrow"><span>Exercícios</span><b class="num">${exs.length}</b></div>
-      <div class="mrow"><span>Séries efetivas</span><b class="num">${efet}</b></div>
-      <div class="mrow"><span>Tonelagem</span><b class="num">${fmtT(ton)}</b></div>
-    </div>
-    ${semNome||semAcad?`<div class="pr">⚠ ${[semNome?"sem nome do treino":"",semAcad?"sem academia":""].filter(Boolean).join(" e ")} — dá pra salvar assim, mas o histórico fica mais pobre.</div>`:""}`,
-    [{label:"Voltar",cls:"btn-g",esc:true},
-     {label:"Confirmar e salvar",cls:"btn-p",fn:()=>confirmarSalvar(sess)}]);
-};
 function volPorGrupo(s){const acc={};if(!s)return acc;for(const ex of s.exercicios){let v=0;
   for(const x of ex.sets)if(!x.warm)v+=kgDe(ex.nome,x.carga)*(Number(x.reps)||0);
   if(v>0){const g=grupoDe(ex.nome);acc[g]=(acc[g]||0)+v}}return acc}
@@ -729,32 +715,28 @@ function confirmarSalvar(sess){
     for(const x of ex.sets)if(!x.warm)novo=Math.max(novo,e1rm(kgDe(ex.nome,x.carga),x.reps));
     if(ant>0&&novo>ant+0.05)prs.push({nome:ex.nome,ganho:novo-ant});
   }
-  const ant=sessaoAnterior(sess.treinoNome,sess.data);
-  const ton=tonelagemSessao(sess), tonAnt=ant?tonelagemSessao(ant):0;
-  const efet=sess.exercicios.reduce((a,ex)=>a+ex.sets.filter(x=>!x.warm).length,0);
-  const linhasG=linhasGrupos(sess,ant);
-
   DB.sessions=[sess,...DB.sessions];
-  persist();UI.novo=null;render();
+  persist();UI.novo=null;
+  TAB="hist";render();
 
   const dias=[...new Set(DB.sessions.map(s=>s.data))].sort();
   const idx=dias.indexOf(sess.data);
   let seq=1;
   for(let i=idx;i>0;i--){const g=(ts(dias[i])-ts(dias[i-1]))/DAY;if(g<=3)seq++;else break}
-  const delta=ant?ton-tonAnt:null;
-  openModal(`<div class="big">🎉</div>
+
+  /* A revisao ja mostrou tonelagem, series e grupamentos. Aqui fica so o
+     que e novidade: recordes e sequencia. Sem nada a comemorar, um aviso
+     rapido basta e a sessao ja aparece no topo do historico. */
+  if(!prs.length&&seq<2){flash(`Treino salvo · ${DB.sessions.length} sessões no histórico`);return}
+  openModal(`<div class="big">${prs.length?"🏆":"🔥"}</div>
     <h2 style="text-align:center">Treino salvo!</h2>
     <div class="sub" style="text-align:center">${esc(sess.treinoNome||"Sessão registrada")} · ${brDate(sess.data)}</div>
+    ${prs.length?`<div class="pr" style="margin-top:14px">🏆 Recorde${prs.length>1?"s":""} de carga estimada:<br>${prs.map(p=>`<b>${esc(p.nome)}</b> +${fmt1(p.ganho)} kg`).join("<br>")}</div>`:""}
     <div style="margin-top:14px">
-      <div class="mrow"><span>Séries efetivas</span><b class="num">${efet}</b></div>
-      <div class="mrow"><span>Tonelagem</span><b class="num">${fmtT(ton)}</b></div>
-      ${ant?`<div class="mrow"><span>vs. ${brDate(ant.data)}</span><b class="num" style="color:${delta>=0?"var(--green)":"var(--red)"}">${delta>=0?"▲ +":"▼ "}${fmtT(Math.abs(delta))}</b></div>`:""}
-      <div class="mrow"><span>Total no histórico</span><b class="num">${DB.sessions.length} sessões</b></div>
       ${seq>1?`<div class="mrow"><span>Sequência</span><b class="num">🔥 ${seq} treinos seguidos</b></div>`:""}
-    </div>
-    ${linhasG?`<div class="gsec"><div class="gt">Volume por grupamento${ant?` · vs. ${brDate(ant.data)}`:""}</div>${linhasG}</div>`:""}
-    ${prs.length?`<div class="pr">🏆 Recorde${prs.length>1?"s":""} de carga estimada:<br>${prs.map(p=>`<b>${esc(p.nome)}</b> +${fmt1(p.ganho)} kg`).join("<br>")}</div>`:""}`,
-    [{label:"Fechar",cls:"btn-p",esc:true,fn:()=>{TAB="hist";render()}}]);
+      <div class="mrow"><span>Total no histórico</span><b class="num">${DB.sessions.length} sessões</b></div>
+    </div>`,
+    [{label:"Fechar",cls:"btn-p",esc:true}]);
 }
 
 /* ============================ aba Histórico ============================ */
