@@ -136,6 +136,18 @@ body.prog #app{padding-top:12px}
 .gbar .gd{text-align:right;font-size:11px;color:var(--faint)}
 .gbar .gd.up{color:var(--green)}
 .gbar .gd.down{color:var(--red)}
+/* dashboard: chips de grupamento roláveis e mini-KPIs do grupo */
+.chips.scroll{flex-wrap:nowrap;overflow-x:auto;padding:2px 2px 6px;margin-top:10px;scrollbar-width:none}
+.chips.scroll::-webkit-scrollbar{display:none}
+.chips.scroll .chip{flex:none;white-space:nowrap}
+.chip small{color:inherit;opacity:.65;font-size:11px;font-weight:600}
+.gchip i{display:inline-block;width:7px;height:7px;border-radius:99px;background:var(--c);margin-right:6px;vertical-align:1px}
+.gchip.on{background:var(--card2);border-color:var(--c);color:var(--tx)}
+.mini{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 6px}
+.mini .mv{font-size:17px;font-weight:800}
+.mini .ml{color:var(--faint);font-size:10.5px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .md{font-size:11px;margin-top:3px;white-space:nowrap}
+.mini .ctx{color:var(--faint)}
 @media(min-width:520px){.kpis{grid-template-columns:repeat(6,1fr)}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -608,7 +620,7 @@ const mesmaFamilia=(a,b)=>familiaDe(a)===familiaDe(b);
 let TAB="treino";
 let UI={
   novo:null, openSess:null, qtdHist:20,
-  ini:null, fim:null, exSel:null, per:"12m", secs:{},
+  ini:null, fim:null, gSel:null, exSel:null, per:"12m", secs:{},
   novaMed:{data:todayISO(),peso:"",gordura:""},
 };
 function novoTreinoVazio(){return{data:todayISO(),academia:gymOptions()[0]||"",treinoNome:"",exercicios:[]}}
@@ -962,68 +974,115 @@ function vDash(){
     ${kc(mgAt?fmt1(mgAt)+" kg":"—","massa magra",dNum(dMg,"no per."))}
   </div>`;
 
-  /* ─────────────────────────── FORÇA ─────────────────────────── */
-  /* contagem por FAMÍLIA de exercício; rep = nome representativo (o mais
-     frequente no período) usado para rótulo e grupamento */
-  const cnt={}, repCnt={};
-  for(const s of S)for(const ex of (s.exercicios||[]))
-    if((ex.sets||[]).some(x=>!x.warm&&Number(x.carga)>0)){
-      const k=familiaDe(ex.nome);cnt[k]=(cnt[k]||0)+1;
-      const rc=repCnt[k]=repCnt[k]||{};rc[ex.nome]=(rc[ex.nome]||0)+1;
+  /* ───────────────────── GRUPAMENTO (seção principal) ─────────────────────
+     Filtro em dois niveis: primeiro o grupamento muscular, depois (opcional)
+     um exercicio (familia) dentro dele. O grafico mostra o volume treino a
+     treino do que estiver selecionado, com a media movel de 30 dias por cima. */
+  const JAN=30;                                   /* janela da média móvel, em dias */
+  /* volume por grupo em todo o período e no anterior (para os chips e o comparativo) */
+  const somaG=acc=>arr=>{for(const s of arr)for(const ex of (s.exercicios||[])){
+    const t=(ex.sets||[]).reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*(Number(x.reps)||0),0);
+    if(t>0){const g=grupoDe(ex.nome);acc[g]=(acc[g]||0)+t}}};
+  const vg={},vgP={};somaG(vg)(S);somaG(vgP)(P);
+  const gruposComDados=ORDEM_G.filter(g=>vg[g]);
+  if(gruposComDados.length){
+    if(!UI.gSel||!vg[UI.gSel])UI.gSel=Object.entries(vg).sort((a,b)=>b[1]-a[1])[0][0];
+    const g=UI.gSel;
+    /* famílias de exercício dentro do grupo, no período */
+    const famCnt={},famRep={};
+    for(const s of S)for(const ex of (s.exercicios||[])){
+      if(grupoDe(ex.nome)!==g)continue;
+      if(!(ex.sets||[]).some(x=>!x.warm&&Number(x.carga)>0))continue;
+      const k=familiaDe(ex.nome);famCnt[k]=(famCnt[k]||0)+1;
+      const rc=famRep[k]=famRep[k]||{};rc[ex.nome]=(rc[ex.nome]||0)+1;
     }
-  const exNames=Object.keys(cnt);
-  const repDe=k=>{const rc=repCnt[k]||{};return Object.entries(rc).sort((a,b)=>b[1]-a[1])[0]?.[0]||k};
-  const rotDe=k=>{const fi=familiaInfo(repDe(k));return fi.regra?fi.label:repDe(k)};
-  if(exNames.length){
-    if(!UI.exSel||!cnt[UI.exSel])UI.exSel=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0][0];
-    h+=secHead("forca","Força","Progressão por exercício e volume por grupo");
-    if(UI.secs.forca!==false){
-      const prog=[];
-      for(const s of S){let best=null,bestE=null;
-        for(const ex of (s.exercicios||[]))if(familiaDe(ex.nome)===UI.exSel)
-          for(const x of (ex.sets||[]))if(!x.warm&&x.carga>0){
-            const c=kgDe(ex.nome,x.carga);
-            if(best==null||c>best)best=c;
-            const e=e1rm(c,x.reps);if(bestE==null||e>bestE)bestE=e}
-        if(best!=null)prog.push({t:ts(s.data),c:best,e:bestE})}
-      const dE=prog.length>1?prog[prog.length-1].e-prog[0].e:null;
-      /* o seletor era uma lista corrida de dezenas de nomes — agora vai
-         separado por grupamento e com a contagem de sessões do período */
-      const byG=new Map();
-      for(const n of exNames){const g=grupoDe(repDe(n));if(!byG.has(g))byG.set(g,[]);byG.get(g).push(n)}
-      const opts=ORDEM_G.filter(g=>byG.has(g)).map(g=>
-        `<optgroup label="${g}">`+byG.get(g).sort((a,b)=>rotDe(a).localeCompare(rotDe(b),"pt-BR",{numeric:true}))
-          .map(n=>`<option value="${esc(n)}"${n===UI.exSel?" selected":""}>${esc(rotDe(n))} · ${cnt[n]}×</option>`).join("")+`</optgroup>`).join("");
-      const gSel=grupoDe(repDe(UI.exSel));
-      const nomesFam=Object.keys(repCnt[UI.exSel]||{});
-      h+=`<div class="card">
-        <div class="ch"><b>Progressão de força</b><span class="tag" style="color:${COR_G[gSel]}">${esc(gSel)}</span></div>
-        <select style="margin-top:8px" onchange="UI.exSel=this.value;render()">${opts}</select>
-        ${nomesFam.length>1?`<div class="sub" style="margin-top:6px">agrupa: ${esc(nomesFam.join(" · "))}</div>`:""}
-        <div class="sub num" style="margin-top:6px">${cnt[UI.exSel]} sessões no período${dE!=null?` · Δ e1RM <span class="${dE>=0?"up":"down"}">${dE>=0?"+":"−"}${fmt1(Math.abs(dE))} kg</span>`:""}</div>
-        ${chart({xTime:true,xs:prog.map(p=>p.t),yFmt:v=>fmt1(v),series:[
-          {pts:prog.map(p=>[p.t,p.c]),color:"var(--amber)",dots:prog.length<40},
-          {pts:prog.map(p=>[p.t,p.e]),color:"var(--green)",dash:true}]})}
-        ${legend([["var(--amber)","carga máx (kg)"],["var(--green)","e1RM estimado (kg)"]])}</div>`;
+    const repDe=k=>Object.entries(famRep[k]||{}).sort((a,b)=>b[1]-a[1])[0]?.[0]||k;
+    const rotDe=k=>{const fi=familiaInfo(repDe(k));return fi.regra?fi.label:repDe(k)};
+    if(UI.exSel&&!famCnt[UI.exSel])UI.exSel=null;
+    const fams=Object.keys(famCnt).sort((a,b)=>famCnt[b]-famCnt[a]||rotDe(a).localeCompare(rotDe(b),"pt-BR"));
+    const filtroEx=UI.exSel?` · ${rotDe(UI.exSel)}`:"";
+    /* série treino a treino: só sessões em que o grupo/exercício apareceu */
+    const volSess=s=>(s.exercicios||[]).reduce((a,ex)=>{
+      if(grupoDe(ex.nome)!==g)return a;
+      if(UI.exSel&&familiaDe(ex.nome)!==UI.exSel)return a;
+      return a+(ex.sets||[]).reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*(Number(x.reps)||0),0)},0);
+    const pts=S.map(s=>({t:ts(s.data),data:s.data,nome:s.treinoNome,v:volSess(s)})).filter(p=>p.v>0);
+    /* média móvel: média das sessões dos últimos 30 dias, inclusive a atual */
+    const mm=pts.map((p,i)=>{const w=pts.filter(q=>q.t>p.t-JAN*DAY&&q.t<=p.t);return w.reduce((a,q)=>a+q.v,0)/w.length});
+    /* comparativos: último treino vs anterior; média 30d vs 30d anteriores */
+    const ult=pts[pts.length-1],ant=pts[pts.length-2];
+    const dUlt=ult&&ant?(ult.v-ant.v)/ant.v*100:null;
+    const tFim=ult?ult.t:ts(UI.fim);
+    const j1=pts.filter(p=>p.t>tFim-JAN*DAY),j2=pts.filter(p=>p.t<=tFim-JAN*DAY&&p.t>tFim-2*JAN*DAY);
+    const m1=j1.length?j1.reduce((a,p)=>a+p.v,0)/j1.length:null,m2=j2.length?j2.reduce((a,p)=>a+p.v,0)/j2.length:null;
+    const dMm=m1!=null&&m2?(m1-m2)/m2*100:null;
+    const pctTxt=v=>v==null||!isFinite(v)?"—":`<span class="${cls(v)}">${seta(v)}${Math.abs(v)<10?fmt1(Math.abs(v)):Math.round(Math.abs(v))}%</span>`;
 
-      /* volume por grupo: atual vs. período anterior */
-      const somaG=acc=>arr=>{for(const s of arr)for(const ex of (s.exercicios||[])){
-        const t=(ex.sets||[]).reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*(Number(x.reps)||0),0);
-        if(t>0){const g=grupoDe(ex.nome);acc[g]=(acc[g]||0)+t}}};
-      const vg={},vgP={};somaG(vg)(S);somaG(vgP)(P);
-      const gs=Object.entries(vg).sort((a,b)=>b[1]-a[1]);
-      if(gs.length){
-        const maxG=gs[0][1];
-        h+=`<div class="card"><div class="ch"><b>Volume por grupo</b><span class="tag">${fmtT(tonAt)} no período</span></div>
-        ${gs.map(([g,v])=>{const p=vgP[g]||0,d=p>0?((v-p)/p)*100:null;
-          return `<div class="gbar">
-            <span class="gn">${esc(g)}</span>
-            <span class="gt"><i style="width:${Math.max(2,v/maxG*100).toFixed(1)}%;background:${COR_G[g]||"var(--faint)"}"></i></span>
-            <span class="num gv">${fmtT(v)}</span>
-            <span class="num gd ${d==null?"":cls(d)}">${d==null?"—":(d>0?"+":d<0?"−":"")+Math.round(Math.abs(d))+"%"}</span>
-          </div>`}).join("")}
-        <div class="sub" style="margin-top:9px">% = variação vs. período anterior (${brDate(pIni)} – ${brDate(pFim)})</div></div>`;
+    h+=secHead("grupo","Grupamento","Volume treino a treino e média móvel de 30 dias");
+    if(UI.secs.grupo!==false){
+      h+=`<div class="chips scroll">${gruposComDados.map(x=>
+        `<button class="chip gchip ${x===g?"on":""}" style="--c:${COR_G[x]}" onclick="UI.gSel='${x}';UI.exSel=null;render()"><i></i>${esc(x)} <small>${fmtT(vg[x])}</small></button>`).join("")}</div>`;
+      /* painel do grupo */
+      const emT=pts.some(p=>p.v>=1000);
+      const yF=emT?(v=>fmt1(v/1000)+" t"):(v=>Math.round(v)+" kg");
+      const xsL=pts.map(p=>brDate(p.data).slice(0,5));
+      h+=`<div class="card">
+        <div class="ch"><b style="color:${COR_G[g]}">${esc(g)}</b><span class="tag">${pts.length} treino${pts.length===1?"":"s"}${filtroEx?esc(filtroEx):""}</span></div>
+        <div class="mini">
+          <div><div class="mv num">${ult?fmtT(ult.v):"—"}</div><div class="ml">último treino${ult?` · ${brDate(ult.data)}`:""}</div><div class="md num">${pctTxt(dUlt)} <span class="ctx">vs anterior</span></div></div>
+          <div><div class="mv num">${m1!=null?fmtT(m1):"—"}</div><div class="ml">média móvel ${JAN}d</div><div class="md num">${pctTxt(dMm)} <span class="ctx">vs ${JAN}d antes</span></div></div>
+          <div><div class="mv num">${fmtT(pts.reduce((a,p)=>a+p.v,0))}</div><div class="ml">total no período</div><div class="md num">${pctTxt(vgP[g]&&!UI.exSel?(vg[g]-vgP[g])/vgP[g]*100:null)} <span class="ctx">vs per. ant.</span></div></div>
+        </div>
+        ${pts.length?chart({xs:xsL,xLabels:xsL,yFmt:yF,bars:{vals:pts.map(p=>p.v),color:COR_G[g]},series:[{pts:mm.map((v,i)=>[i,v]),color:"var(--tx)"}]}):`<div class="sub">Sem treinos desse grupo no período.</div>`}
+        ${legend([[COR_G[g],"volume por treino"],["var(--tx)",`média móvel ${JAN} dias`]])}
+      </div>`;
+      /* chips de exercício (segundo nível) */
+      if(fams.length){
+        h+=`<div class="chips scroll" style="margin-top:10px">
+          <button class="chip ${UI.exSel?"":"on"}" onclick="UI.exSel=null;render()">Todos</button>
+          ${fams.map(k=>`<button class="chip ${k===UI.exSel?"on":""}" onclick="UI.exSel='${esc(k).replace(/'/g,"&#39;")}';render()">${esc(rotDe(k))} <small>${famCnt[k]}×</small></button>`).join("")}
+        </div>`;
       }
+      /* força do exercício escolhido */
+      if(UI.exSel){
+        const prog=[];
+        for(const s of S){let best=null,bestE=null;
+          for(const ex of (s.exercicios||[]))if(familiaDe(ex.nome)===UI.exSel)
+            for(const x of (ex.sets||[]))if(!x.warm&&x.carga>0){
+              const c=kgDe(ex.nome,x.carga);
+              if(best==null||c>best)best=c;
+              const e=e1rm(c,x.reps);if(bestE==null||e>bestE)bestE=e}
+          if(best!=null)prog.push({t:ts(s.data),c:best,e:bestE})}
+        const dE=prog.length>1?prog[prog.length-1].e-prog[0].e:null;
+        const nomesFam=Object.keys(famRep[UI.exSel]||{});
+        h+=`<div class="card">
+          <div class="ch"><b>Força · ${esc(rotDe(UI.exSel))}</b><span class="tag num">${dE!=null?`Δ e1RM <span class="${dE>=0?"up":"down"}">${dE>=0?"+":"−"}${fmt1(Math.abs(dE))} kg</span>`:""}</span></div>
+          ${nomesFam.length>1?`<div class="sub">agrupa: ${esc(nomesFam.join(" · "))}</div>`:""}
+          ${chart({xTime:true,xs:prog.map(p=>p.t),yFmt:v=>fmt1(v),series:[
+            {pts:prog.map(p=>[p.t,p.c]),color:"var(--amber)",dots:prog.length<40},
+            {pts:prog.map(p=>[p.t,p.e]),color:"var(--green)",dash:true}]})}
+          ${legend([["var(--amber)","carga máx (kg)"],["var(--green)","e1RM estimado (kg)"]])}</div>`;
+      }
+      /* últimos treinos do grupo, com delta vs o anterior */
+      if(pts.length){
+        const ultimos=[...pts].reverse().slice(0,8);
+        h+=`<div class="card"><b>Últimos treinos${filtroEx?esc(filtroEx):""}</b>
+          <table><tr><th>Data</th><th>Treino</th><th style="text-align:right">Volume</th><th style="text-align:right">Δ</th></tr>
+          ${ultimos.map((p,i)=>{const idx=pts.indexOf(p),a=pts[idx-1];const d=a?(p.v-a.v)/a.v*100:null;
+            return `<tr><td class="num">${brDate(p.data)}</td><td style="color:var(--dim)">${esc((p.nome||"").replace(/^Treino\s*/i,""))}</td><td class="num" style="text-align:right">${fmtT(p.v)}</td><td class="num" style="text-align:right">${pctTxt(d)}</td></tr>`}).join("")}
+          </table></div>`;
+      }
+      /* comparativo entre grupos: atual vs período anterior (toque seleciona) */
+      const gs=Object.entries(vg).sort((a,b)=>b[1]-a[1]),maxG=gs[0][1];
+      h+=`<div class="card"><div class="ch"><b>Todos os grupos</b><span class="tag">${fmtT(tonAt)} no período</span></div>
+      ${gs.map(([x,v])=>{const p=vgP[x]||0,d=p>0?((v-p)/p)*100:null;
+        return `<div class="gbar" style="cursor:pointer${x===g?";font-weight:700":""}" onclick="UI.gSel='${x}';UI.exSel=null;render()">
+          <span class="gn" style="${x===g?`color:${COR_G[x]}`:""}">${esc(x)}</span>
+          <span class="gt"><i style="width:${Math.max(2,v/maxG*100).toFixed(1)}%;background:${COR_G[x]||"var(--faint)"}"></i></span>
+          <span class="num gv">${fmtT(v)}</span>
+          <span class="num gd ${d==null?"":cls(d)}">${d==null?"—":(d>0?"+":d<0?"−":"")+Math.round(Math.abs(d))+"%"}</span>
+        </div>`}).join("")}
+      <div class="sub" style="margin-top:9px">% = variação vs. período anterior (${brDate(pIni)} – ${brDate(pFim)})</div></div>`;
     }
   }
 
