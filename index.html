@@ -107,7 +107,9 @@ body.prog #app{padding-top:12px}
 .modal .big{font-size:38px;line-height:1;text-align:center;margin:2px 0 8px}
 .grow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}
 .grow .gd{width:8px;height:8px;border-radius:99px;flex:none}
-.grow .gn{flex:1;color:var(--dim)}
+.grow .gn{flex:1;min-width:0;color:var(--dim)}
+.grow b{white-space:nowrap;flex:none}
+.mrow b{white-space:nowrap;text-align:right}
 .gbar{height:4px;border-radius:99px;background:var(--card2);margin-top:4px;overflow:hidden}
 .gbar>div{height:100%;border-radius:99px}
 .gsec{margin-top:14px}
@@ -490,6 +492,117 @@ const grupoDe=n=>{const s=String(n||"");for(const [g,re] of GRUPOS)if(re.test(s)
 const ORDEM_G=["Coxa","Glúteo","Panturrilha","Abdome","Dorsais","Trapézio","Peitoral","Bíceps","Tríceps","Antebraço","Ombros","Outros"];
 const COR_G={Coxa:"#a78bfa","Glúteo":"#e879a6",Panturrilha:"#e0894c",Abdome:"#5ec8b8",Dorsais:"var(--blue)","Trapézio":"#4f7fa8",Peitoral:"var(--red)","Bíceps":"var(--green)","Tríceps":"#b5d67a","Antebraço":"#94a3b8",Ombros:"var(--amber)",Outros:"var(--faint)"};
 
+/* ==================== famílias de exercícios ====================
+   Nomes diferentes para o mesmo movimento no mesmo implemento viram
+   uma "família" (ex.: "Desenvolvimento Militar" e "Desenvolvimento
+   barra"). A família vale para o "última vez", para as comparações do
+   modal de conclusão, para os recordes e para o gráfico de força.
+   Histórico e listagens continuam mostrando o nome digitado.
+
+   Regras: barra, halteres, máquina, polia e Smith são implementos
+   distintos e nunca se misturam. Pegada (pronada/supinada/neutra) e
+   unilateral/bilateral também separam. Só variações de escrita, ordem
+   das palavras, complementos redundantes e apelidos de aparelho são
+   unificados. A lista é testada em ordem: vence a primeira que casar;
+   se nada casar, o nome limpo vira a própria família.               */
+const FAM_LIMPA=s=>flat(s)
+  .replace(/\[barras\]/g," ")
+  .replace(/\((?:direita|esquerda|meio|cinza|padrao|botao|powerlift|predio|so direito|ultim[ao] da (?:direita|esquerda))\)/g," ")
+  .replace(/\\/g," ")
+  .replace(/crussif[iu]x[ou]|crucifixo/g,"crucifixo")
+  .replace(/\binvertid[ao]\b/g,"inverso")
+  .replace(/\balteres\b|\bhalter\b|\balter\b/g,"halteres")
+  .replace(/\bpul+ey\b/g,"polia")
+  .replace(/\bcross-?over\b/g,"crossover")
+  .replace(/\s+/g," ").trim();
+const FAMILIAS=[
+  /* ombros */
+  ["Desenvolvimento barra",/^desenvolvimento (militar|barra|com barra)$/],
+  ["Desenvolvimento máquina",/^desenvolvimento maquina$/],
+  ["Desenvolvimento halteres",/^desenvolvimento com halteres/],
+  ["Desenvolvimento Smith",/^desenvolvimento smith$/],
+  ["Elevação lateral halteres",/^elevacao lateral (sentado )?halteres$/],
+  ["Elevação lateral polia",/^elevacao lateral cross (anterior|posterior)$/],
+  ["Elevação frontal halteres peg. supinada",/^elevacao frontal halteres peg supinada$/],
+  ["Elevação frontal halteres peg. neutra",/^elevacao frontal halteres peg neutra$/],
+  ["Elevação frontal polia",/^elevacao frontal polia$/],
+  ["Elevação frontal unilateral polia",/^elevacao frontal unilateral polia$/],
+  ["Elevação frontal máquina",/^elevacao frontal maquina$/],
+  ["Crucifixo inverso halteres",/^crucifixo inverso halteres$/],
+  ["Crucifixo inverso polia",/^(crucifixo inverso (polia|cross)|posterior ombro (bilateral )?polia)$/],
+  ["Face pull polia",/^face pull$/],
+  ["Remada alta barra",/^remada alta$/],
+  ["Remada alta polia",/^remada alta cross$/],
+  /* trapézio */
+  ["Encolhimento halteres",/^encolhimento halteres$/],
+  /* peitoral */
+  ["Supino reto máquina",/^supino reto maquina$/],
+  ["Supino inclinado halteres",/^supino inclinado halteres$/],
+  ["Supino inclinado máquina",/^supino inclinado (maquina|articulado)$/],
+  ["Supino inclinado Smith",/^supino inclinado smith$/],
+  ["Supino inclinado barra",/^supino inclinado barra$/],
+  ["Crucifixo inclinado halteres",/^crucifixo inclinado halteres( 30º)?$/],
+  ["Crucifixo inclinado polia",/^crucifixo inclinado (cross|polia)$/],
+  ["Cross-over polia",/^crossover( \((tras|frente)\)| polia (alta|media))$/],
+  ["Peck deck",/^(peck deck( crucifixo na maquina)?|crucifixo maquina)$/],
+  /* dorsais */
+  ["Puxada pronada",/^(puxada vertical peg pronada|puxada aberta (pronada|com barra)|puxador costas maquina em frente ao bebedouro)$/],
+  ["Puxada supinada",/^puxada vertical peg supinada$/],
+  ["Puxada triângulo",/^(puxada neutra triangulo|puxada vertical com triangulo)$/],
+  ["Remada curvada barra",/^(remada curvada|remada curvada barra peg pronada|remada com a barra pronta)$/],
+  ["Remada unilateral halter",/^(remada halter(es)? unilateral peg neutra|serrote)$/],
+  ["Remada baixa polia",/^remada baixa polia$/],
+  ["Remada máquina",/^(remada na maquina|remada maquina 2ª esquerda|remada alta na maquina \(low row\))$/],
+  ["Pullover polia",/^pullover polia$/],
+  /* bíceps */
+  ["Rosca direta barra",/^(rosca direta barra reta( ou barra w)?|rosca direta)$/],
+  ["Rosca direta polia",/^(rosca direta (cross|polia)( \(crossover\))?)$/],
+  ["Rosca corda polia",/^(rosca polia corda( \(crossover\))?|rosca martelo corda cross)$/],
+  ["Rosca Scott",/^rosca scott( barra w| maquina)?$/],
+  ["Rosca banco inclinado halteres",/^(rosca banco|rosca halteres sentado inclinado)$/],
+  ["Rosca alternada halteres",/^rosca alternada( halteres)?$/],
+  ["Rosca martelo halteres",/^rosca martelo( halteres)?$/],
+  /* tríceps */
+  ["Tríceps corda polia",/^triceps (corda|polia corda)$/],
+  ["Tríceps francês polia corda",/^(triceps frances na polia com corda|rosca francesa cross corda|triceps frances)$/],
+  ["Tríceps polia barra",/^(triceps na polia barra w|triceps polia peg pronada)$/],
+  ["Tríceps testa halteres",/^(rosca testa halteres peg neutra|triceps testa halteres)$/],
+  /* antebraço */
+  ["Flexão de punho barra",/^flexao de punho barra( sentado)?$/],
+  ["Rosca inversa barra",/^(rosca inversa barra|rosca inverso)$/],
+  ["Rosca inversa polia",/^(rosca inversa cross|rosca inverso polia( \(crossover\))?)$/],
+  /* coxa e glúteo */
+  ["Agachamento livre",/^agachamento livre$/],
+  ["Agachamento Smith",/^agachamento smith$/],
+  ["Leg press",/^leg press$/],
+  ["Leg press horizontal",/^leg horizontal$/],
+  ["Cadeira extensora",/^(cadeira )?extensora( lorena)?$/],
+  ["Cadeira flexora",/^(cadeira )?flexora$/],
+  ["Cadeira adutora",/^(cadeira )?adutora$/],
+  ["Cadeira abdutora",/^(cadeira )?abdutora$/],
+  ["Stiff barra",/^stiff( barra)?$/],
+  ["Elevação pélvica máquina",/^elevacao pelvica( maquina)?$/],
+  /* panturrilha */
+  ["Gêmeos sentado",/^(gemeos sentado maquina|panturrilha (banco|cadeira))$/],
+  ["Gêmeos em pé máquina",/^(gemeos em pe maquina|panturrilha em pe)$/],
+  /* abdome */
+  ["Abdominal infra",/^(abdominal )?infra$/],
+];
+const FAM_CACHE=new Map();
+/* chave da família (identidade) e rótulo (para exibir). Sem regra, a
+   chave é o nome limpo e o rótulo é o próprio nome digitado.         */
+function familiaInfo(nome){
+  const n=String(nome||"");
+  let r=FAM_CACHE.get(n);if(r)return r;
+  const k=FAM_LIMPA(n);
+  r={key:k,label:n,regra:false};
+  for(const [f,re] of FAMILIAS)if(re.test(k)){r={key:f,label:f,regra:true};break}
+  FAM_CACHE.set(n,r);return r;
+}
+const familiaDe=n=>familiaInfo(n).key;
+const mesmaFamilia=(a,b)=>familiaDe(a)===familiaDe(b);
+
+
 
 /* ============================ estado de UI ============================ */
 let TAB="treino";
@@ -510,9 +623,16 @@ function progressoHTML(){
   return `<div class="progwrap"><div class="progbar"><div class="progfill" style="width:${pct}%"></div></div>
     <div class="proglbl num"><span>${doneEx}/${totEx} exercícios concluídos</span><span>${pct}%</span></div></div>`;
 }
+/* última sessão com um exercício da MESMA FAMÍLIA (ver familiaDe). Prefere o
+   nome idêntico quando ele existe na mesma data; devolve o nome gravado. */
 function ultimaVez(nome){
-  for(const s of [...DB.sessions].sort((a,b)=>b.data.localeCompare(a.data)))
-    for(const ex of (s.exercicios||[]))if(ex.nome===nome&&(ex.sets||[]).length)return{data:s.data,sets:ex.sets};
+  const fam=familiaDe(nome);if(!fam)return null;
+  for(const s of [...DB.sessions].sort((a,b)=>b.data.localeCompare(a.data))){
+    const exs=(s.exercicios||[]).filter(ex=>(ex.sets||[]).length&&familiaDe(ex.nome)===fam);
+    if(!exs.length)continue;
+    const ex=exs.find(x=>x.nome===nome)||exs[0];
+    return{data:s.data,sets:ex.sets,nome:ex.nome};
+  }
   return null;
 }
 function vTreino(){
@@ -553,7 +673,7 @@ function vTreino(){
         oninput="sugerir(${ei},this)" onfocus="sugerir(${ei},this)" onblur="blurNomeEx(${ei})">
       <div class="sug" id="sug-${ei}"></div>
       ${badgesEx(ex.nome,n.treinoNome)}
-      ${ref?`<div class="ref">Última vez (${brDate(ref.data)}): ${ref.sets.filter(x=>!x.warm).map(x=>`${fmt1(x.carga)}×${x.reps}`).join("  ")} — <u onclick="copiarRef(${ei})">copiar</u></div>`:""}
+      ${ref?`<div class="ref">Última vez (${brDate(ref.data)}${ref.nome&&ref.nome!==ex.nome?` · ${esc(ref.nome)}`:""}): ${ref.sets.filter(x=>!x.warm).map(x=>`${fmt1(x.carga)}×${x.reps}`).join("  ")} — <u onclick="copiarRef(${ei})">copiar</u></div>`:""}
       ${ex.sets.map((x,si)=>`<div class="setrow ${x.ok?"ok":""}">
         <input inputmode="decimal" placeholder="carga" value="${esc(x.carga)}" onchange="UI.novo.exercicios[${ei}].sets[${si}].carga=this.value">
         <input inputmode="numeric" placeholder="reps" value="${esc(x.reps)}" onchange="UI.novo.exercicios[${ei}].sets[${si}].reps=this.value">
@@ -600,10 +720,18 @@ function statsEx(sets,nome){
     txt:ef.map(x=>`${fmt1(x.carga)}×${x.reps}`).join("  ")
   };
 }
-function deltaTag(d,f){
+/* variação percentual em relação ao valor anterior (base). Retorna "" quando
+   não há base válida. Abaixo de 10% mostra uma casa decimal pra não virar 0%. */
+function pctTag(d,base){
+  if(d==null||!isFinite(d)||!base||base<=0)return"";
+  const p=d/base*100, ap=Math.abs(p);
+  const txt=ap<10?fmt1(ap):String(Math.round(ap));
+  return ` (${p>0?"+":"−"}${txt}%)`;
+}
+function deltaTag(d,f,base){
   if(d==null||!isFinite(d))return"";
   if(Math.abs(d)<0.05)return `<span style="color:var(--dim);font-weight:600"> = igual</span>`;
-  return `<span class="num" style="color:${d>0?"var(--green)":"var(--red)"};font-weight:600"> ${d>0?"▲ +":"▼ −"}${f(Math.abs(d))}</span>`;
+  return `<span class="num" style="color:${d>0?"var(--green)":"var(--red)"};font-weight:600"> ${d>0?"▲ +":"▼ −"}${f(Math.abs(d))}${pctTag(d,base)}</span>`;
 }
 window.concluirEx=ei=>{
   const ex=UI.novo.exercicios[ei];
@@ -614,18 +742,19 @@ window.concluirEx=ei=>{
   const a=statsEx(ex.sets,nome);
   let b=ref?statsEx(ref.sets,nome):null; if(b&&!b.n)b=null;
   const kg=v=>fmt1(v)+" kg", un=v=>fmt1(v);
-  const barras=fatorEx(nome)>1;
+  const barras=fatorEx(nome)>1, fi=familiaInfo(nome);
   let linhas=`<div class="mrow"><span>Séries efetivas</span><b class="num">${a.n}${b?deltaTag(a.n-b.n,un):""}</b></div>
-    <div class="mrow"><span>Peso máximo</span><b class="num">${kg(a.max)}${b?deltaTag(a.max-b.max,kg):""}</b></div>
-    <div class="mrow"><span>Volume</span><b class="num">${fmtT(a.vol)}${b?deltaTag(a.vol-b.vol,fmtT):""}</b></div>
-    <div class="mrow"><span>Melhor e1RM</span><b class="num">${kg(a.e1)}${b?deltaTag(a.e1-b.e1,kg):""}</b></div>`;
+    <div class="mrow"><span>Peso máximo</span><b class="num">${kg(a.max)}${b?deltaTag(a.max-b.max,kg,b.max):""}</b></div>
+    <div class="mrow"><span>Volume</span><b class="num">${fmtT(a.vol)}${b?deltaTag(a.vol-b.vol,fmtT,b.vol):""}</b></div>
+    <div class="mrow"><span>Melhor e1RM</span><b class="num">${kg(a.e1)}${b?deltaTag(a.e1-b.e1,kg,b.e1):""}</b></div>`;
   openModal(`<h2>Concluir exercício?</h2>
     <div class="sub">${esc(nome)} · ${esc(grupoDe(nome))}${barras?` · carga em barras (×${FATOR_BARRA} kg)`:""}</div>
+    ${fi.regra&&fi.label!==nome?`<div class="sub">família: ${esc(fi.label)}</div>`:""}
     <div style="margin-top:12px">${linhas}</div>
     <div class="gsec">
       <div class="gt">Hoje</div>
       <div class="num" style="font-size:13px;margin-top:2px">${esc(a.txt||"—")}</div>
-      <div class="gt" style="margin-top:10px">${b?`Anterior · ${brDate(ref.data)}`:"Anterior"}</div>
+      <div class="gt" style="margin-top:10px">${b?`Anterior · ${brDate(ref.data)}${ref.nome!==nome?` · ${esc(ref.nome)}`:""}`:"Anterior"}</div>
       <div class="num" style="font-size:13px;color:var(--dim);margin-top:2px">${b?esc(b.txt):"primeira vez que você registra este exercício"}</div>
     </div>`,
     [{label:"Voltar",cls:"btn-g",esc:true},
@@ -656,7 +785,7 @@ window.revisarSessao=(auto)=>{
       <div class="mrow"><span>Exercícios</span><b class="num">${exs.length}</b></div>
       <div class="mrow"><span>Séries efetivas</span><b class="num">${efet}</b></div>
       <div class="mrow"><span>Tonelagem</span><b class="num">${fmtT(ton)}</b></div>
-      ${ant?`<div class="mrow"><span>vs. ${brDate(ant.data)}</span><b class="num" style="color:${delta>=0?"var(--green)":"var(--red)"}">${delta>=0?"▲ +":"▼ "}${fmtT(Math.abs(delta))}</b></div>`:""}
+      ${ant?`<div class="mrow"><span>vs. ${brDate(ant.data)}</span><b class="num" style="color:${delta>=0?"var(--green)":"var(--red)"}">${Math.abs(delta)<0.5?"= igual":`${delta>0?"▲ +":"▼ −"}${fmtT(Math.abs(delta))}${pctTag(delta,tonAnt)}`}</b></div>`:""}
     </div>
     ${linhasG?`<div class="gsec"><div class="gt">Volume por grupamento${ant?` · vs. ${brDate(ant.data)}`:""}</div>${linhasG}</div>`:""}
     ${semNome||semAcad?`<div class="pr">⚠ ${[semNome?"sem nome do treino":"",semAcad?"sem academia":""].filter(Boolean).join(" e ")}. Dá pra salvar assim, mas o histórico fica mais pobre.</div>`:""}`,
@@ -673,7 +802,7 @@ function recordeE1rm(nome,excluirId){
   for(const s of DB.sessions){
     if(s.id===excluirId)continue;
     for(const ex of (s.exercicios||[])){
-      if(ex.nome!==nome)continue;
+      if(!mesmaFamilia(ex.nome,nome))continue;
       for(const x of (ex.sets||[]))if(!x.warm)best=Math.max(best,e1rm(kgDe(ex.nome,x.carga),Number(x.reps)||0));
     }
   }
@@ -696,7 +825,7 @@ function linhasGrupos(sess,ant){
     const chip=!ant?"":!va&&v?`<b class="num" style="color:var(--blue)">novo</b>`
       :!v?`<b class="num" style="color:var(--red)">▼ −${fmtT(va)}</b>`
       :Math.abs(d)<0.5?`<b class="num" style="color:var(--faint)">=</b>`
-      :`<b class="num" style="color:${d>0?"var(--green)":"var(--red)"}">${d>0?"▲ +":"▼ −"}${fmtT(Math.abs(d))}</b>`;
+      :`<b class="num" style="color:${d>0?"var(--green)":"var(--red)"}">${d>0?"▲ +":"▼ −"}${fmtT(Math.abs(d))}${pctTag(d,va)}</b>`;
     return `<div class="grow"><span class="gd" style="background:${COR_G[g]}"></span>
       <span class="gn">${g}<div class="gbar"><div style="width:${Math.round(v/gMax*100)}%;background:${COR_G[g]}"></div></div></span>
       <b class="num">${fmtT(v)}</b>${chip}</div>`;
@@ -834,17 +963,24 @@ function vDash(){
   </div>`;
 
   /* ─────────────────────────── FORÇA ─────────────────────────── */
-  const cnt={};
+  /* contagem por FAMÍLIA de exercício; rep = nome representativo (o mais
+     frequente no período) usado para rótulo e grupamento */
+  const cnt={}, repCnt={};
   for(const s of S)for(const ex of (s.exercicios||[]))
-    if((ex.sets||[]).some(x=>!x.warm&&Number(x.carga)>0))cnt[ex.nome]=(cnt[ex.nome]||0)+1;
+    if((ex.sets||[]).some(x=>!x.warm&&Number(x.carga)>0)){
+      const k=familiaDe(ex.nome);cnt[k]=(cnt[k]||0)+1;
+      const rc=repCnt[k]=repCnt[k]||{};rc[ex.nome]=(rc[ex.nome]||0)+1;
+    }
   const exNames=Object.keys(cnt);
+  const repDe=k=>{const rc=repCnt[k]||{};return Object.entries(rc).sort((a,b)=>b[1]-a[1])[0]?.[0]||k};
+  const rotDe=k=>{const fi=familiaInfo(repDe(k));return fi.regra?fi.label:repDe(k)};
   if(exNames.length){
     if(!UI.exSel||!cnt[UI.exSel])UI.exSel=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0][0];
     h+=secHead("forca","Força","Progressão por exercício e volume por grupo");
     if(UI.secs.forca!==false){
       const prog=[];
       for(const s of S){let best=null,bestE=null;
-        for(const ex of (s.exercicios||[]))if(ex.nome===UI.exSel)
+        for(const ex of (s.exercicios||[]))if(familiaDe(ex.nome)===UI.exSel)
           for(const x of (ex.sets||[]))if(!x.warm&&x.carga>0){
             const c=kgDe(ex.nome,x.carga);
             if(best==null||c>best)best=c;
@@ -854,13 +990,16 @@ function vDash(){
       /* o seletor era uma lista corrida de dezenas de nomes — agora vai
          separado por grupamento e com a contagem de sessões do período */
       const byG=new Map();
-      for(const n of exNames){const g=grupoDe(n);if(!byG.has(g))byG.set(g,[]);byG.get(g).push(n)}
+      for(const n of exNames){const g=grupoDe(repDe(n));if(!byG.has(g))byG.set(g,[]);byG.get(g).push(n)}
       const opts=ORDEM_G.filter(g=>byG.has(g)).map(g=>
-        `<optgroup label="${g}">`+byG.get(g).sort((a,b)=>a.localeCompare(b,"pt-BR",{numeric:true}))
-          .map(n=>`<option value="${esc(n)}"${n===UI.exSel?" selected":""}>${esc(n)} · ${cnt[n]}×</option>`).join("")+`</optgroup>`).join("");
+        `<optgroup label="${g}">`+byG.get(g).sort((a,b)=>rotDe(a).localeCompare(rotDe(b),"pt-BR",{numeric:true}))
+          .map(n=>`<option value="${esc(n)}"${n===UI.exSel?" selected":""}>${esc(rotDe(n))} · ${cnt[n]}×</option>`).join("")+`</optgroup>`).join("");
+      const gSel=grupoDe(repDe(UI.exSel));
+      const nomesFam=Object.keys(repCnt[UI.exSel]||{});
       h+=`<div class="card">
-        <div class="ch"><b>Progressão de força</b><span class="tag" style="color:${COR_G[grupoDe(UI.exSel)]}">${esc(grupoDe(UI.exSel))}</span></div>
+        <div class="ch"><b>Progressão de força</b><span class="tag" style="color:${COR_G[gSel]}">${esc(gSel)}</span></div>
         <select style="margin-top:8px" onchange="UI.exSel=this.value;render()">${opts}</select>
+        ${nomesFam.length>1?`<div class="sub" style="margin-top:6px">agrupa: ${esc(nomesFam.join(" · "))}</div>`:""}
         <div class="sub num" style="margin-top:6px">${cnt[UI.exSel]} sessões no período${dE!=null?` · Δ e1RM <span class="${dE>=0?"up":"down"}">${dE>=0?"+":"−"}${fmt1(Math.abs(dE))} kg</span>`:""}</div>
         ${chart({xTime:true,xs:prog.map(p=>p.t),yFmt:v=>fmt1(v),series:[
           {pts:prog.map(p=>[p.t,p.c]),color:"var(--amber)",dots:prog.length<40},
