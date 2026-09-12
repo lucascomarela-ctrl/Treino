@@ -436,14 +436,22 @@ function sugestoesEx(ei){
     pool=[...comeca,...contem];
     if(pool.length===1&&flat(pool[0])===q)return[];
   }
-  return pool.slice(0,6);
+  const vistos=new Set();
+  const dedup=[];
+  for(const x of pool){
+    const k=familiaDe(x);
+    if(vistos.has(k))continue;
+    vistos.add(k);
+    dedup.push(x);
+  }
+  return dedup.slice(0,6);
 }
 window.sugerir=(ei,el)=>{
   const ex=UI.novo&&UI.novo.exercicios[ei];if(!ex)return;
   ex.nome=el.value;
   const box=document.getElementById("sug-"+ei);if(!box)return;
   const list=sugestoesEx(ei);
-  box.innerHTML=list.map(x=>`<button class="sugi" data-n="${esc(x)}" onmousedown="event.preventDefault()" onclick="escolherSug(${ei},this.dataset.n)">${esc(x)}</button>`).join("");
+  box.innerHTML=list.map(x=>`<button class="sugi" data-n="${esc(x)}" onmousedown="event.preventDefault()" onclick="escolherSug(${ei},this.dataset.n)">${esc(familiaInfo(x).label)}</button>`).join("");
   box.style.display=list.length?"flex":"none";
   if(window.revelarFoco)window.revelarFoco();
 };
