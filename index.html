@@ -288,7 +288,15 @@ function gymOptions(){
 const FATOR_BARRA=5;
 const fatorEx=n=>/\[barras\]/i.test(String(n||""))?FATOR_BARRA:1;
 const kgDe=(nome,carga)=>(Number(carga)||0)*fatorEx(nome);
-const tonelagemSessao=s=>(s.exercicios||[]).reduce((a,ex)=>a+(ex.sets||[]).reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*(Number(x.reps)||0),0),0);
+/* ==================== exercícios por tempo ====================
+   Prancha e isometrias são anotadas em SEGUNDOS no campo de reps. Para o
+   volume a premissa é kg × minutos (60 s = 1 "rep"), então 14 kg × 60 s
+   entra como 14 no volume. No e1RM o tempo não conta: vale só a carga.  */
+const ehTempo=n=>/prancha|plank|isom[ée]tric|\[seg\]/i.test(String(n||""));
+const repsVol=(nome,r)=>(Number(r)||0)/(ehTempo(nome)?60:1);
+const repsE1=(nome,r)=>ehTempo(nome)?0:(Number(r)||0);
+const fmtSet=(nome,x)=>`${fmt1(x.carga)}×${x.reps}${ehTempo(nome)&&x.reps!==""?"s":""}`;
+const tonelagemSessao=s=>(s.exercicios||[]).reduce((a,ex)=>a+(ex.sets||[]).reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*repsVol(ex.nome,x.reps),0),0);
 
 /* ============================ import / export ============================ */
 function exportPayload(){return{app:"gym-tracker",exportedAt:new Date().toISOString(),sessions:DB.sessions,measures:DB.measures,plan:DB.plan,patches:DB.patches||[]}}
@@ -659,7 +667,7 @@ function vTreino(){
   if(!UI.novo)UI.novo=novoTreinoVazio();
   const n=UI.novo;
   const efet=n.exercicios.reduce((a,ex)=>a+ex.sets.filter(x=>!x.warm&&x.carga!=="").length,0);
-  const ton=n.exercicios.reduce((a,ex)=>a+ex.sets.reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*(Number(x.reps)||0),0),0);
+  const ton=n.exercicios.reduce((a,ex)=>a+ex.sets.reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*repsVol(ex.nome,x.reps),0),0);
   const gyms=gymOptions();
   const planTreinos=(DB.plan&&Array.isArray(DB.plan.treinos))?DB.plan.treinos:[];
   const totEx=n.exercicios.length;
@@ -683,7 +691,7 @@ function vTreino(){
         <div class="done-head"><span class="done-check">✓</span><b>${esc(ex.nome||"(sem nome)")}</b>
           <button class="btn-edit" onclick="UI.novo.exercicios[${ei}].done=false;render()">✎ editar</button></div>
         ${badgesEx(ex.nome,n.treinoNome)}
-        <div class="done-sets num">${ex.sets.filter(x=>x.carga!==""||x.reps!=="").map(x=>`${x.warm?"AQ·":""}${fmt1(x.carga)}×${x.reps}`).join("  ")||"—"}</div>
+        <div class="done-sets num">${ex.sets.filter(x=>x.carga!==""||x.reps!=="").map(x=>`${x.warm?"AQ·":""}${fmtSet(ex.nome,x)}`).join("  ")||"—"}</div>
       </div>`;
       return;
     }
@@ -693,10 +701,10 @@ function vTreino(){
         oninput="sugerir(${ei},this)" onfocus="sugerir(${ei},this)" onblur="blurNomeEx(${ei})">
       <div class="sug" id="sug-${ei}"></div>
       ${badgesEx(ex.nome,n.treinoNome)}
-      ${ref?`<div class="ref">Última vez (${brDate(ref.data)}${ref.nome&&ref.nome!==ex.nome?` · ${esc(ref.nome)}`:""}): ${ref.sets.filter(x=>!x.warm).map(x=>`${fmt1(x.carga)}×${x.reps}`).join("  ")} — <u onclick="copiarRef(${ei})">copiar</u></div>`:""}
+      ${ref?`<div class="ref">Última vez (${brDate(ref.data)}${ref.nome&&ref.nome!==ex.nome?` · ${esc(ref.nome)}`:""}): ${ref.sets.filter(x=>!x.warm).map(x=>fmtSet(ex.nome,x)).join("  ")} — <u onclick="copiarRef(${ei})">copiar</u></div>`:""}
       ${ex.sets.map((x,si)=>`<div class="setrow ${x.ok?"ok":""}">
         <input inputmode="decimal" placeholder="carga" value="${esc(x.carga)}" onchange="UI.novo.exercicios[${ei}].sets[${si}].carga=this.value">
-        <input inputmode="numeric" placeholder="reps" value="${esc(x.reps)}" onchange="UI.novo.exercicios[${ei}].sets[${si}].reps=this.value">
+        <input inputmode="numeric" placeholder="${ehTempo(ex.nome)?"seg":"reps"}" value="${esc(x.reps)}" onchange="UI.novo.exercicios[${ei}].sets[${si}].reps=this.value">
         <button class="chk-t ${x.ok?"on":""}" title="série concluída" onclick="UI.novo.exercicios[${ei}].sets[${si}].ok=!UI.novo.exercicios[${ei}].sets[${si}].ok;render()">✓</button>
         <button class="xbtn" onclick="UI.novo.exercicios[${ei}].sets.splice(${si},1);render()">✕</button>
       </div>`).join("")}
@@ -734,10 +742,10 @@ function statsEx(sets,nome){
   return{
     n:ef.length,
     max:ef.length?Math.max(...ef.map(c)):0,
-    vol:ef.reduce((a,x)=>a+c(x)*(Number(x.reps)||0),0),
+    vol:ef.reduce((a,x)=>a+c(x)*repsVol(nome,x.reps),0),
     reps:ef.reduce((a,x)=>a+(Number(x.reps)||0),0),
-    e1:ef.reduce((a,x)=>Math.max(a,c(x)*(1+Math.min(Number(x.reps)||0,15)/30)),0),
-    txt:ef.map(x=>`${fmt1(x.carga)}×${x.reps}`).join("  ")
+    e1:ef.reduce((a,x)=>Math.max(a,c(x)*(1+Math.min(repsE1(nome,x.reps),15)/30)),0),
+    txt:ef.map(x=>fmtSet(nome,x)).join("  ")
   };
 }
 /* variação percentual em relação ao valor anterior (base). Retorna "" quando
@@ -823,7 +831,7 @@ function recordeE1rm(nome,excluirId){
     if(s.id===excluirId)continue;
     for(const ex of (s.exercicios||[])){
       if(!mesmaFamilia(ex.nome,nome))continue;
-      for(const x of (ex.sets||[]))if(!x.warm)best=Math.max(best,e1rm(kgDe(ex.nome,x.carga),Number(x.reps)||0));
+      for(const x of (ex.sets||[]))if(!x.warm)best=Math.max(best,e1rm(kgDe(ex.nome,x.carga),repsE1(ex.nome,x.reps)));
     }
   }
   return best;
@@ -834,7 +842,7 @@ function limparSessao(n){
     .filter(ex=>ex.nome&&ex.sets.length);
 }
 function volPorGrupo(s){const acc={};if(!s)return acc;for(const ex of s.exercicios){let v=0;
-  for(const x of ex.sets)if(!x.warm)v+=kgDe(ex.nome,x.carga)*(Number(x.reps)||0);
+  for(const x of ex.sets)if(!x.warm)v+=kgDe(ex.nome,x.carga)*repsVol(ex.nome,x.reps);
   if(v>0){const g=grupoDe(ex.nome);acc[g]=(acc[g]||0)+v}}return acc}
 function linhasGrupos(sess,ant){
   const gNow=volPorGrupo(sess), gAnt=volPorGrupo(ant);
@@ -861,7 +869,7 @@ function confirmarSalvar(sess){
   for(const ex of sess.exercicios){
     const ant=recordeE1rm(ex.nome,sess.id);
     let novo=0;
-    for(const x of ex.sets)if(!x.warm)novo=Math.max(novo,e1rm(kgDe(ex.nome,x.carga),x.reps));
+    for(const x of ex.sets)if(!x.warm)novo=Math.max(novo,e1rm(kgDe(ex.nome,x.carga),repsE1(ex.nome,x.reps)));
     if(ant>0&&novo>ant+0.05)prs.push({nome:ex.nome,ganho:novo-ant});
   }
   DB.sessions=[sess,...DB.sessions];
@@ -900,7 +908,7 @@ function vHist(){
       <div class="d num">${esc(s.academia||"—")} · ${fmtT(tonelagemSessao(s))}</div>`;
     if(open){
       for(const ex of (s.exercicios||[])){
-        h+=`<div class="exname">${esc(ex.nome)}</div><div class="set-line num">${(ex.sets||[]).map(x=>`${x.warm?"AQ·":""}${fmt1(x.carga)}×${x.reps}`).join("  ")}</div>`;
+        h+=`<div class="exname">${esc(ex.nome)}</div><div class="set-line num">${(ex.sets||[]).map(x=>`${x.warm?"AQ·":""}${fmtSet(ex.nome,x)}`).join("  ")}</div>`;
       }
       if(s.obs)h+=`<div class="d" style="font-style:italic">"${esc(s.obs)}"</div>`;
       h+=`<button class="btn-danger" style="margin-top:6px" onclick="event.stopPropagation();apagarSess('${s.id}')">Apagar sessão</button>`;
@@ -989,7 +997,7 @@ function vDash(){
   const JAN=30;                                   /* janela da média móvel, em dias */
   /* volume por grupo em todo o período e no anterior (para os chips e o comparativo) */
   const somaG=acc=>arr=>{for(const s of arr)for(const ex of (s.exercicios||[])){
-    const t=(ex.sets||[]).reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*(Number(x.reps)||0),0);
+    const t=(ex.sets||[]).reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*repsVol(ex.nome,x.reps),0);
     if(t>0){const g=grupoDe(ex.nome);acc[g]=(acc[g]||0)+t}}};
   const vg={},vgP={};somaG(vg)(S);somaG(vgP)(P);
   const gruposComDados=ORDEM_G.filter(g=>vg[g]);
@@ -1013,7 +1021,7 @@ function vDash(){
     const volSess=s=>(s.exercicios||[]).reduce((a,ex)=>{
       if(grupoDe(ex.nome)!==g)return a;
       if(UI.exSel&&familiaDe(ex.nome)!==UI.exSel)return a;
-      return a+(ex.sets||[]).reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*(Number(x.reps)||0),0)},0);
+      return a+(ex.sets||[]).reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*repsVol(ex.nome,x.reps),0)},0);
     const pts=S.map(s=>({t:ts(s.data),data:s.data,nome:s.treinoNome,v:volSess(s)})).filter(p=>p.v>0);
     /* média móvel: média das sessões dos últimos 30 dias, inclusive a atual */
     const mm=pts.map((p,i)=>{const w=pts.filter(q=>q.t>p.t-JAN*DAY&&q.t<=p.t);return w.reduce((a,q)=>a+q.v,0)/w.length});
@@ -1059,7 +1067,7 @@ function vDash(){
             for(const x of (ex.sets||[]))if(!x.warm&&x.carga>0){
               const c=kgDe(ex.nome,x.carga);
               if(best==null||c>best)best=c;
-              const e=e1rm(c,x.reps);if(bestE==null||e>bestE)bestE=e}
+              const e=e1rm(c,repsE1(ex.nome,x.reps));if(bestE==null||e>bestE)bestE=e}
           if(best!=null)prog.push({t:ts(s.data),c:best,e:bestE})}
         const dE=prog.length>1?prog[prog.length-1].e-prog[0].e:null;
         const nomesFam=Object.keys(famRep[UI.exSel]||{});
