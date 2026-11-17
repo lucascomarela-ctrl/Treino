@@ -641,6 +641,35 @@ let UI={
 };
 function novoTreinoVazio(){return{data:todayISO(),academia:gymOptions()[0]||"",treinoNome:"",exercicios:[]}}
 
+/* ================= rascunho do treino em andamento =================
+   O iOS descarta o app da memoria quando ele fica minimizado. Antes o
+   treino em andamento vivia so na memoria (UI.novo) e se perdia. Agora
+   cada alteracao (serie digitada, serie marcada, exercicio concluido)
+   e gravada num rascunho separado do banco de sessoes, e o rascunho e
+   recarregado ao abrir o app. Ele e apagado quando a sessao e salva.  */
+const DRAFT_KEY="gym-app-rascunho-v1";
+let tRasc=null;
+function rascunhoTemConteudo(n){
+  return !!(n&&((n.treinoNome||"").trim()||(n.exercicios||[]).length));
+}
+function salvarRascunho(){
+  clearTimeout(tRasc);tRasc=null;
+  try{
+    if(rascunhoTemConteudo(UI.novo))localStorage.setItem(DRAFT_KEY,JSON.stringify({novo:UI.novo,salvoEm:Date.now()}));
+    else localStorage.removeItem(DRAFT_KEY);
+  }catch(e){}
+}
+function agendarRascunho(){clearTimeout(tRasc);tRasc=setTimeout(salvarRascunho,250)}
+function carregarRascunho(){
+  try{
+    const raw=localStorage.getItem(DRAFT_KEY);if(!raw)return false;
+    const j=JSON.parse(raw);
+    if(j&&j.novo&&Array.isArray(j.novo.exercicios)&&rascunhoTemConteudo(j.novo)){UI.novo=j.novo;return true}
+  }catch(e){}
+  return false;
+}
+window.salvarRascunho=salvarRascunho;
+
 /* ============================ aba Treino ============================ */
 /* Barra de progresso: renderizada na faixa fixa #progtop, fora da rolagem. */
 function progressoHTML(){
@@ -683,7 +712,7 @@ function vTreino(){
     ${planTreinos.length?`<span class="lbl">Treinos do plano</span>
     <div class="chips">${planTreinos.map((t,i)=>`<button class="chip ${t.nome===n.treinoNome?"on":""}" onclick="selectPlanTreino(${i})">${esc(t.nome)}</button>`).join("")}</div>`:""}
     <span class="lbl">Nome do treino (ex.: Treino A – Peito/Tríceps)</span>
-    <input value="${esc(n.treinoNome)}" onchange="UI.novo.treinoNome=this.value">
+    <input value="${esc(n.treinoNome)}" oninput="UI.novo.treinoNome=this.value">
   </div>`;
   n.exercicios.forEach((ex,ei)=>{
     if(ex.done){
@@ -703,8 +732,8 @@ function vTreino(){
       ${badgesEx(ex.nome,n.treinoNome)}
       ${ref?`<div class="ref">Última vez (${brDate(ref.data)}${ref.nome&&ref.nome!==ex.nome?` · ${esc(ref.nome)}`:""}): ${ref.sets.filter(x=>!x.warm).map(x=>fmtSet(ex.nome,x)).join("  ")} — <u onclick="copiarRef(${ei})">copiar</u></div>`:""}
       ${ex.sets.map((x,si)=>`<div class="setrow ${x.ok?"ok":""}">
-        <input inputmode="decimal" placeholder="carga" value="${esc(x.carga)}" onchange="UI.novo.exercicios[${ei}].sets[${si}].carga=this.value">
-        <input inputmode="numeric" placeholder="${ehTempo(ex.nome)?"seg":"reps"}" value="${esc(x.reps)}" onchange="UI.novo.exercicios[${ei}].sets[${si}].reps=this.value">
+        <input inputmode="decimal" placeholder="carga" value="${esc(x.carga)}" oninput="UI.novo.exercicios[${ei}].sets[${si}].carga=this.value">
+        <input inputmode="numeric" placeholder="${ehTempo(ex.nome)?"seg":"reps"}" value="${esc(x.reps)}" oninput="UI.novo.exercicios[${ei}].sets[${si}].reps=this.value">
         <button class="chk-t ${x.ok?"on":""}" title="série concluída" onclick="UI.novo.exercicios[${ei}].sets[${si}].ok=!UI.novo.exercicios[${ei}].sets[${si}].ok;render()">✓</button>
         <button class="xbtn" onclick="UI.novo.exercicios[${ei}].sets.splice(${si},1);render()">✕</button>
       </div>`).join("")}
@@ -1222,9 +1251,16 @@ function render(){
   $("#nav").innerHTML=TABS.map(([id,ic,lb])=>`<button class="${TAB===id?"on":""}" onclick="TAB='${id}';render()"><span class="ic">${ic}</span>${lb}</button>`).join("");
   TAB_ANT=TAB;
   app.scrollTop = mesmaAba ? y : 0;
+  salvarRascunho();
 }
+const RASC_REC=carregarRascunho();
 window.render=render;window.UI=UI;window.importFile=importFile;window.enviarParaClaude=enviarParaClaude;window.download=download;window.exportPayload=exportPayload;window.todayISO=todayISO;window.normNome=normNome;window.closeModal=closeModal;window.esc=esc;
 render();
+if(RASC_REC)flash("Treino em andamento recuperado ✓");
+
+/* digitação, marcação e qualquer alteração gravam o rascunho na hora */
+document.addEventListener("input",agendarRascunho,true);
+document.addEventListener("change",agendarRascunho,true);
 
 /* ================= viewport e teclado =================
    Nesta arquitetura o JS nao "corrige rolagem". Ele so mantem o #shell
@@ -1254,7 +1290,12 @@ function alturaTeclado(){
 function sincronizarViewport(){
   const vv=window.visualViewport, sh=elShell(), app=elApp();
   if(!sh)return;
+  /* minimizado, o iOS informa uma area visivel zerada ou minuscula. Se o
+     shell fosse encolhido para isso, ao voltar o app ficava com a tela
+     preta ate ser reiniciado. Em segundo plano o layout nao e tocado. */
+  if(document.visibilityState==="hidden")return;
   const h=Math.round(vv?vv.height:window.innerHeight);
+  if(h<150){sh.style.height="";sh.style.top="0px";return}
   const kb=alturaTeclado(), comTeclado=kb>80;
   sh.style.height=h+"px";
   /* a pagina nunca deve rolar; se o Safari deslocar, volta ao lugar */
@@ -1351,6 +1392,27 @@ document.addEventListener("touchend",e=>{
   q.el.click();
 },{passive:false});
 document.addEventListener("touchcancel",()=>{tqSug=null},{passive:true});
+
+/* ao minimizar: grava tudo. Ao voltar: refaz o layout e redesenha. */
+function aoSair(){
+  const a=document.activeElement;
+  if(a&&a.tagName==="INPUT"&&a.dispatchEvent){try{a.dispatchEvent(new Event("change",{bubbles:true}))}catch(e){}}
+  salvarRascunho();
+}
+function aoVoltar(){
+  campoFoco=null;manual=false;
+  document.body.classList.remove("kb");
+  sincronizarViewport();
+  try{render()}catch(e){}
+  setTimeout(sincronizarViewport,150);
+  setTimeout(sincronizarViewport,600);
+}
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="hidden")aoSair();else aoVoltar();
+});
+window.addEventListener("pagehide",aoSair);
+window.addEventListener("pageshow",e=>{if(e.persisted)aoVoltar()});
+window.addEventListener("focus",()=>setTimeout(sincronizarViewport,50));
 
 sincronizarViewport();
 </script>
