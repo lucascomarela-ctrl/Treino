@@ -41,6 +41,7 @@ button{background:var(--card2);border:1px solid var(--line);border-radius:10px;c
 .btn-p{background:var(--amber);border-color:var(--amber);color:#181510;font-weight:700}
 .btn-g{background:transparent;border-color:var(--line);color:var(--dim)}
 .btn-danger{background:transparent;border-color:#5a3030;color:var(--red);font-size:13px}
+.btn-del{background:var(--red);border-color:var(--red);color:#1c0d0d;font-weight:700}
 .chip{border-radius:999px;padding:6px 12px;font-size:13px;color:var(--dim)}
 .chip.on{background:var(--amber);border-color:var(--amber);color:#181510;font-weight:700}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
@@ -110,8 +111,10 @@ body.prog #app{padding-top:12px}
 .grow .gn{flex:1;min-width:0;color:var(--dim)}
 .grow b{white-space:nowrap;flex:none}
 .mrow b{white-space:nowrap;text-align:right}
-.gbar{height:4px;border-radius:99px;background:var(--card2);margin-top:4px;overflow:hidden}
-.gbar>div{height:100%;border-radius:99px}
+/* barra fina do modal de revisão. Nome próprio: antes era ".gbar", o mesmo
+   do card "Todos os grupos" do Dashboard, e as duas regras se misturavam */
+.gbar-m{height:4px;border-radius:99px;background:var(--card2);margin-top:4px;overflow:hidden}
+.gbar-m>div{height:100%;border-radius:99px}
 .gsec{margin-top:14px}
 .gsec .gt{font-size:12px;color:var(--faint);text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px}
 .mrow{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px}
@@ -148,6 +151,32 @@ body.prog #app{padding-top:12px}
 .mini .ml{color:var(--faint);font-size:10.5px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mini .md{font-size:11px;margin-top:3px;white-space:nowrap}
 .mini .ctx{color:var(--faint)}
+/* aba Início */
+.hsec{font-size:11.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:20px 2px 0}
+.hweek{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.hweek span{display:block;font-size:11px;color:var(--faint)}
+.hweek span.on{color:var(--amber);font-weight:800}
+.hday{width:32px;height:32px;margin:5px auto 0;border-radius:99px;background:var(--card2);display:flex;align-items:center;justify-content:center;font-style:normal;font-size:14px;font-weight:800;color:var(--c)}
+.hday.ok{background:var(--card2);box-shadow:inset 0 0 0 2px var(--c)}
+.hday.hoje{box-shadow:inset 0 0 0 2px var(--amber)}
+.hday.ok.hoje{box-shadow:inset 0 0 0 2px var(--c),0 0 0 2px var(--bg),0 0 0 4px var(--amber)}
+.hday.fut{background:transparent;border:1px dashed var(--line)}
+.hrow{display:flex;align-items:center;gap:12px}
+.htreino{width:100%;display:flex;align-items:center;gap:12px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-top:8px;color:var(--tx)}
+.htreino.hsug{border-color:var(--amber)}
+.hlet{flex:none;width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:var(--c);background:var(--card2);box-shadow:inset 0 0 0 1.5px var(--c)}
+.htx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.htx b{font-size:15px;line-height:1.25}
+.htx small{color:var(--dim);font-size:12.5px}
+.htag{flex:none;font-size:10.5px;font-weight:800;color:#181510;background:var(--amber);border-radius:99px;padding:3px 8px;text-transform:uppercase;letter-spacing:.05em}
+.hchev{flex:none;color:var(--faint);font-size:22px;line-height:1}
+.hcont{border-color:var(--amber)}
+.htiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.htile{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;color:var(--tx);min-height:96px}
+.htile .ic{font-size:20px;line-height:1;margin-bottom:4px}
+.htile b{font-size:14.5px}
+.htile small{color:var(--dim);font-size:12px;line-height:1.35}
+.nav button{font-size:11px}
 @media(min-width:520px){.kpis{grid-template-columns:repeat(6,1fr)}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -175,6 +204,10 @@ const fmtT=kg=>kg>=1000?fmt1(kg/1000)+" t":Math.round(kg)+" kg";
 const uid=()=>Math.random().toString(36).slice(2,9);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const e1rm=(c,r)=>r>0?c*(1+r/30):c;
+/* número digitado: aceita vírgula ou ponto como separador decimal.
+   O teclado decimal do iPhone em português digita "37,5", e Number()
+   sozinho devolve NaN para isso (a série acabava gravada com 0 kg).  */
+const num=v=>{if(typeof v==="number")return v;const s=String(v??"").trim().replace(/\s+/g,"").replace(",",".");return s===""?NaN:Number(s)};
 
 /* nome de máquina: suprime especificações (ex.: "Amarelas") */
 const normNome=n=>String(n||"")
@@ -218,6 +251,64 @@ window.modalAcao=i=>{
   closeModal();
   if(a&&a.fn)a.fn();
 };
+
+/* ==================== registro de uso (só no aparelho) ====================
+   Guarda como o app é usado, para orientar melhorias futuras: aberturas,
+   abas e tempo em cada uma, toques em botões, eventos principais (concluir,
+   salvar, apagar, exportar...), duração dos treinos e erros do app.
+   Nada sai do aparelho: os dados vão junto no backup .json e no arquivo
+   do "Enviar para o Claude". O resumo e o botão de zerar ficam no Backup. */
+const USO_KEY="gym-app-uso-v1", USO_MAX_EV=400, USO_MAX_CHAVES=300, USO_MAX_ERROS=50, USO_MAX_TREINOS=200;
+function usoVazio(){return{v:1,desde:new Date().toISOString(),aberturas:0,retornos:0,ultimoBackup:null,eventos:{},toques:{},tempoAbas:{},treinos:[],erros:[],ultimos:[]}}
+let USO=usoVazio();
+try{const j=JSON.parse(localStorage.getItem(USO_KEY)||"null");if(j&&j.v===1)USO=Object.assign(usoVazio(),j)}catch(e){}
+let tUso=null;
+function gravarUso(){clearTimeout(tUso);tUso=null;try{localStorage.setItem(USO_KEY,JSON.stringify(USO))}catch(e){}}
+function agendarUso(){clearTimeout(tUso);tUso=setTimeout(gravarUso,1500)}
+const abaAtual=()=>{try{return TAB}catch(e){return "?"}};
+function registrarUso(ev,det){
+  try{
+    USO.eventos[ev]=(USO.eventos[ev]||0)+1;
+    const r={t:Date.now(),aba:abaAtual(),ev};if(det!=null)r.d=det;
+    USO.ultimos.push(r);
+    if(USO.ultimos.length>USO_MAX_EV)USO.ultimos.splice(0,USO.ultimos.length-USO_MAX_EV);
+    agendarUso();
+  }catch(e){}
+}
+function registrarErro(msg,linha){
+  try{
+    USO.erros.push({t:Date.now(),aba:abaAtual(),msg:String(msg||"").slice(0,200),linha:linha||null});
+    if(USO.erros.length>USO_MAX_ERROS)USO.erros.splice(0,USO.erros.length-USO_MAX_ERROS);
+    gravarUso();
+  }catch(e){}
+}
+window.addEventListener("error",e=>registrarErro(e.message,e.lineno));
+window.addEventListener("unhandledrejection",e=>registrarErro("promise: "+((e.reason&&e.reason.message)||e.reason)));
+/* todo toque em botão conta, pelo texto do botão. Números no fim do texto
+   (contagens, toneladas) saem do rótulo para não criar uma chave por valor */
+document.addEventListener("click",e=>{
+  try{
+    const b=e.target&&e.target.closest?e.target.closest("button,.sess,u"):null;if(!b)return;
+    const ic=b.querySelector(".ic"), tit=b.querySelector("b");
+    const txt=tit?tit.textContent:String(b.textContent||b.title||"").replace(ic?ic.textContent:"\u0000","");
+    let r=b.classList.contains("sugi")?"sugestão de exercício"
+      :b.classList.contains("sess")?"abrir/fechar sessão"
+      :b.classList.contains("htreino")?"começar treino "+((b.querySelector(".hlet")||{}).textContent||"")
+      :b.closest("#nav")?"aba "+txt
+      :txt;
+    r=r.replace(/\s+/g," ").trim().replace(/\s*\([^)]*\)\s*$/,"").replace(/(\s+[\d.,]+\s*(×|t|kg)?)+$/i,"").slice(0,40)||"(sem texto)";
+    const k=`${abaAtual()}: ${r}`;
+    if(USO.toques[k]==null&&Object.keys(USO.toques).length>=USO_MAX_CHAVES)return;
+    USO.toques[k]=(USO.toques[k]||0)+1;agendarUso();
+  }catch(err){}
+},true);
+/* tempo em cada aba (em segundos), sem contar o app em segundo plano */
+let abaDesde=Date.now(), abaContada=null;
+function contarTempoAba(){
+  if(abaContada){const s=Math.round((Date.now()-abaDesde)/1000);if(s>0&&s<6*3600)USO.tempoAbas[abaContada]=(USO.tempoAbas[abaContada]||0)+s}
+  abaDesde=Date.now();abaContada=abaAtual();agendarUso();
+}
+const fmtDur=s=>s<3600?`${Math.max(1,Math.round(s/60))} min`:`${fmt1(s/3600)} h`;
 
 /* ============================ estado ============================ */
 const KEY="gym-app-standalone-v1";
@@ -287,19 +378,19 @@ function gymOptions(){
    séries continua mostrando o número que você digitou.               */
 const FATOR_BARRA=5;
 const fatorEx=n=>/\[barras\]/i.test(String(n||""))?FATOR_BARRA:1;
-const kgDe=(nome,carga)=>(Number(carga)||0)*fatorEx(nome);
+const kgDe=(nome,carga)=>(num(carga)||0)*fatorEx(nome);
 /* ==================== exercícios por tempo ====================
    Prancha e isometrias são anotadas em SEGUNDOS no campo de reps. Para o
    volume a premissa é kg × minutos (60 s = 1 "rep"), então 14 kg × 60 s
    entra como 14 no volume. No e1RM o tempo não conta: vale só a carga.  */
 const ehTempo=n=>/prancha|plank|isom[ée]tric|\[seg\]/i.test(String(n||""));
-const repsVol=(nome,r)=>(Number(r)||0)/(ehTempo(nome)?60:1);
-const repsE1=(nome,r)=>ehTempo(nome)?0:(Number(r)||0);
-const fmtSet=(nome,x)=>`${fmt1(x.carga)}×${x.reps}${ehTempo(nome)&&x.reps!==""?"s":""}`;
+const repsVol=(nome,r)=>(num(r)||0)/(ehTempo(nome)?60:1);
+const repsE1=(nome,r)=>ehTempo(nome)?0:(num(r)||0);
+const fmtSet=(nome,x)=>`${fmt1(num(x.carga)||0)}×${x.reps}${ehTempo(nome)&&x.reps!==""?"s":""}`;
 const tonelagemSessao=s=>(s.exercicios||[]).reduce((a,ex)=>a+(ex.sets||[]).reduce((b,x)=>x.warm?b:b+kgDe(ex.nome,x.carga)*repsVol(ex.nome,x.reps),0),0);
 
 /* ============================ import / export ============================ */
-function exportPayload(){return{app:"gym-tracker",exportedAt:new Date().toISOString(),sessions:DB.sessions,measures:DB.measures,plan:DB.plan,patches:DB.patches||[]}}
+function exportPayload(){return{app:"gym-tracker",exportedAt:new Date().toISOString(),sessions:DB.sessions,measures:DB.measures,plan:DB.plan,patches:DB.patches||[],uso:USO}}
 function download(name,text,type="application/json"){
   const blob=new Blob([text],{type});const url=URL.createObjectURL(blob);
   const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
@@ -319,16 +410,21 @@ async function importFile(file){
     if(Array.isArray(m))DB.measures=m;
     if(p)DB.plan=p;
     DB.patches=Array.isArray(j.patches)?j.patches:[];
+    /* o registro de uso viaja junto no backup: ao restaurar num aparelho novo, continua */
+    if(j.uso&&j.uso.v===1&&(j.uso.aberturas||0)>=(USO.aberturas||0))USO=Object.assign(usoVazio(),j.uso);
+    registrarUso("importar_backup",{sessoes:DB.sessions.length});gravarUso();
     normalizeAll();aplicarPatches();persist();render();
     flash(`Backup importado ✓ (${DB.sessions.length} sessões${Array.isArray(m)?`, ${m.length} medidas`:""})`);
   }catch(e){flash("Não consegui ler esse arquivo .json")}
 }
 async function enviarParaClaude(){
+  registrarUso("enviar_claude");contarTempoAba();gravarUso();
   let code="";
   try{const r=await fetch(location.href);code=await r.text()}catch(e){}
   if(!code)code="<!DOCTYPE html>\n"+document.documentElement.outerHTML;
   const txt=
 `Este arquivo contém o código-fonte completo do meu app de treino (HTML autônomo) e todos os meus dados. Use-o como base para os ajustes que eu pedir e devolva o HTML completo atualizado, mantendo o formato dos dados.
+O campo "uso" dos dados é o registro de como eu uso o app (abas, toques, tempo, duração dos treinos e erros). Use-o para sugerir melhorias.
 
 === DADOS (backup JSON) ===
 ${JSON.stringify(exportPayload())}
@@ -492,6 +588,7 @@ window.blurNomeEx=ei=>{setTimeout(()=>{
   if(box){box.style.display="none";box.innerHTML=""}
 },180)};
 window.addExercicio=()=>{
+  if(!UI.novo.inicio)UI.novo.inicio=Date.now();
   UI.novo.exercicios.push({nome:"",sets:[{carga:"",reps:"",warm:false,ok:false}]});render();
   const ins=document.querySelectorAll("input[data-exname]");
   const el=ins[ins.length-1];if(el)el.focus();
@@ -639,7 +736,13 @@ let UI={
   ini:null, fim:null, gSel:null, exSel:null, per:"12m", secs:{},
   novaMed:{data:todayISO(),peso:"",gordura:""},
 };
-function novoTreinoVazio(){return{data:todayISO(),academia:gymOptions()[0]||"",treinoNome:"",exercicios:[]}}
+/* academia padrão = a da última sessão salva (lembra a sua escolha, inclusive
+   em viagem); sem histórico ou se for a Bodytech, a mais frequente      */
+function academiaPadrao(){
+  let u=null;for(const s of DB.sessions)if(s.academia&&(!u||s.data>u.data))u=s;
+  return u&&!/bodytech/i.test(u.academia)?u.academia:(gymOptions()[0]||"");
+}
+function novoTreinoVazio(){return{data:todayISO(),academia:academiaPadrao(),treinoNome:"",exercicios:[]}}
 
 /* ================= rascunho do treino em andamento =================
    O iOS descarta o app da memoria quando ele fica minimizado. Antes o
@@ -753,6 +856,8 @@ window.selectPlanTreino=i=>{
   const planTreinos=(DB.plan&&Array.isArray(DB.plan.treinos))?DB.plan.treinos:[];
   const t=planTreinos[i];if(!t)return;
   UI.novo.treinoNome=t.nome||"";
+  UI.novo.inicio=Date.now();   /* para medir a duração do treino no registro de uso */
+  registrarUso("carregar_treino_do_plano",letraTreino(t.nome));
   UI.novo.exercicios=(t.exercicios||[]).map(ex=>{
     const nome=normNome(ex.nome);
     const ref=ultimaVez(nome);
@@ -767,12 +872,12 @@ window.selectPlanTreino=i=>{
 function statsEx(sets,nome){
   const f=fatorEx(nome);
   const ef=(sets||[]).filter(x=>!x.warm&&x.carga!==""&&x.reps!=="");
-  const c=x=>(Number(x.carga)||0)*f;
+  const c=x=>(num(x.carga)||0)*f;
   return{
     n:ef.length,
     max:ef.length?Math.max(...ef.map(c)):0,
     vol:ef.reduce((a,x)=>a+c(x)*repsVol(nome,x.reps),0),
-    reps:ef.reduce((a,x)=>a+(Number(x.reps)||0),0),
+    reps:ef.reduce((a,x)=>a+(num(x.reps)||0),0),
     e1:ef.reduce((a,x)=>Math.max(a,c(x)*(1+Math.min(repsE1(nome,x.reps),15)/30)),0),
     txt:ef.map(x=>fmtSet(nome,x)).join("  ")
   };
@@ -819,7 +924,7 @@ window.concluirEx=ei=>{
 };
 window.aplicarConclusao=ei=>{
   const ex=UI.novo&&UI.novo.exercicios[ei];if(!ex)return;
-  ex.done=true;render();
+  ex.done=true;registrarUso("concluir_exercicio",grupoDe(ex.nome));render();
   if(UI.novo.exercicios.length&&UI.novo.exercicios.every(e=>e.done))setTimeout(mostrarResumo,80);
 };
 /* Tela unica de revisao: serve tanto para o fim automatico do treino
@@ -829,6 +934,7 @@ window.revisarSessao=(auto)=>{
   const n=UI.novo;if(!n)return;
   const exs=limparSessao(n);
   if(!exs.length){if(!auto)flash("Adicione ao menos um exercício com séries");return}
+  registrarUso("revisao",auto?"automatica":"botao");
   const sess={id:`s-${n.data}-${uid().slice(0,4)}`,data:n.data,academia:n.academia,treinoNome:n.treinoNome,exercicios:exs};
   const ant=sessaoAnterior(sess.treinoNome,sess.data);
   const ton=tonelagemSessao(sess), tonAnt=ant?tonelagemSessao(ant):0, delta=ant?ton-tonAnt:null;
@@ -867,7 +973,7 @@ function recordeE1rm(nome,excluirId){
 }
 function limparSessao(n){
   return n.exercicios
-    .map(ex=>({nome:canonNome(ex.nome,n.treinoNome),sets:ex.sets.filter(x=>x.carga!==""||x.reps!=="").map(x=>({carga:Number(x.carga)||0,reps:Number(x.reps)||0,warm:!!x.warm}))}))
+    .map(ex=>({nome:canonNome(ex.nome,n.treinoNome),sets:ex.sets.filter(x=>x.carga!==""||x.reps!=="").map(x=>({carga:num(x.carga)||0,reps:num(x.reps)||0,warm:!!x.warm}))}))
     .filter(ex=>ex.nome&&ex.sets.length);
 }
 function volPorGrupo(s){const acc={};if(!s)return acc;for(const ex of s.exercicios){let v=0;
@@ -884,7 +990,7 @@ function linhasGrupos(sess,ant){
       :Math.abs(d)<0.5?`<b class="num" style="color:var(--faint)">=</b>`
       :`<b class="num" style="color:${d>0?"var(--green)":"var(--red)"}">${d>0?"▲ +":"▼ −"}${fmtT(Math.abs(d))}${pctTag(d,va)}</b>`;
     return `<div class="grow"><span class="gd" style="background:${COR_G[g]}"></span>
-      <span class="gn">${g}<div class="gbar"><div style="width:${Math.round(v/gMax*100)}%;background:${COR_G[g]}"></div></div></span>
+      <span class="gn">${g}<div class="gbar-m"><div style="width:${Math.round(v/gMax*100)}%;background:${COR_G[g]}"></div></div></span>
       <b class="num">${fmtT(v)}</b>${chip}</div>`;
   }).join("");
 }
@@ -901,8 +1007,16 @@ function confirmarSalvar(sess){
     for(const x of ex.sets)if(!x.warm)novo=Math.max(novo,e1rm(kgDe(ex.nome,x.carga),repsE1(ex.nome,x.reps)));
     if(ant>0&&novo>ant+0.05)prs.push({nome:ex.nome,ganho:novo-ant});
   }
+  /* registro de uso: duração (só para treino do próprio dia, até 5 h) */
+  const ini=UI.novo&&UI.novo.inicio, min=ini&&sess.data===todayISO()?Math.round((Date.now()-ini)/60000):null;
+  USO.treinos.push({data:sess.data,treino:letraTreino(sess.treinoNome),academia:sess.academia||"",
+    min:min!=null&&min>0&&min<=300?min:null,exercicios:sess.exercicios.length,
+    series:sess.exercicios.reduce((a,ex)=>a+ex.sets.filter(x=>!x.warm).length,0),recordes:prs.length});
+  if(USO.treinos.length>USO_MAX_TREINOS)USO.treinos.splice(0,USO.treinos.length-USO_MAX_TREINOS);
+  registrarUso("salvar_sessao",{min:USO.treinos[USO.treinos.length-1].min,recordes:prs.length});gravarUso();
   DB.sessions=[sess,...DB.sessions];
   persist();UI.novo=null;
+  SCROLL.hist=0;   /* a sessão nova aparece no topo do histórico */
   TAB="hist";render();
 
   const dias=[...new Set(DB.sessions.map(s=>s.data))].sort();
@@ -940,7 +1054,7 @@ function vHist(){
         h+=`<div class="exname">${esc(ex.nome)}</div><div class="set-line num">${(ex.sets||[]).map(x=>`${x.warm?"AQ·":""}${fmtSet(ex.nome,x)}`).join("  ")}</div>`;
       }
       if(s.obs)h+=`<div class="d" style="font-style:italic">"${esc(s.obs)}"</div>`;
-      h+=`<button class="btn-danger" style="margin-top:6px" onclick="event.stopPropagation();apagarSess('${s.id}')">Apagar sessão</button>`;
+      h+=`<button class="btn-danger" style="margin-top:6px" onclick="event.stopPropagation();apagarSess(${DB.sessions.indexOf(s)})">Apagar sessão</button>`;
     }
     h+=`</div>`;
   });
@@ -948,10 +1062,24 @@ function vHist(){
   if(UI.qtdHist<ord.length)h+=`<button class="btn-g" style="width:100%;margin-top:10px" onclick="UI.qtdHist+=30;render()">Mostrar mais (${ord.length-UI.qtdHist} restantes)</button>`;
   return h;
 }
-window.apagarSess=id=>{DB.sessions=DB.sessions.filter(s=>s.id!==id);persist();flash("Sessão apagada");render()};
+/* apagar pede confirmação. O registro é localizado pela posição no DB
+   (não pelo id), então funciona também em sessões importadas sem id. */
+window.apagarSess=i=>{
+  const s=DB.sessions[i];if(!s)return;
+  const nEx=(s.exercicios||[]).length;
+  openModal(`<h2>Apagar sessão?</h2>
+    <div class="sub">${esc(s.treinoNome||"Treino")} · ${brDate(s.data)}${s.academia?` · ${esc(s.academia)}`:""}</div>
+    <div class="mrow" style="margin-top:12px"><span>Conteúdo</span><b class="num">${nEx} exercício${nEx===1?"":"s"} · ${fmtT(tonelagemSessao(s))}</b></div>
+    <div class="sub" style="margin-top:10px;color:var(--dim)">Essa ação não pode ser desfeita. Se quiser uma garantia, exporte um backup antes.</div>`,
+    [{label:"Cancelar",cls:"btn-g",esc:true},
+     {label:"Apagar",cls:"btn-del",fn:()=>{DB.sessions=DB.sessions.filter(x=>x!==s);UI.openSess=null;persist();registrarUso("apagar_sessao",s.data);flash("Sessão apagada");render()}}]);
+};
 
 /* ============================ aba Dashboard ============================ */
-function quick(id){
+function quick(id){aplicarPeriodo(id);registrarUso("periodo",id);render()}
+/* período do Dashboard sem redesenhar: usado também ao reabrir o app,
+   para voltar com o mesmo período que você tinha escolhido            */
+function aplicarPeriodo(id){
   const hoje=todayISO();
   const all=[...DB.sessions].map(s=>s.data).sort();
   const first=all[0]||hoje;
@@ -960,7 +1088,8 @@ function quick(id){
   else if(id==="90d"){UI.ini=isoD(ts(hoje)-90*DAY);UI.fim=hoje}
   else if(id==="2026"){UI.ini="2026-01-01";UI.fim=hoje}
   else if(id==="2025"){UI.ini="2025-01-01";UI.fim="2025-12-31"}
-  UI.per=id;render();
+  else return;
+  UI.per=id;
 }
 window.quick=quick;
 /* seções recolhíveis: abertas por padrão */
@@ -1037,7 +1166,7 @@ function vDash(){
     const famCnt={},famRep={};
     for(const s of S)for(const ex of (s.exercicios||[])){
       if(grupoDe(ex.nome)!==g)continue;
-      if(!(ex.sets||[]).some(x=>!x.warm&&Number(x.carga)>0))continue;
+      if(!(ex.sets||[]).some(x=>!x.warm&&num(x.carga)>0))continue;
       const k=familiaDe(ex.nome);famCnt[k]=(famCnt[k]||0)+1;
       const rc=famRep[k]=famRep[k]||{};rc[ex.nome]=(rc[ex.nome]||0)+1;
     }
@@ -1093,7 +1222,7 @@ function vDash(){
         const prog=[];
         for(const s of S){let best=null,bestE=null;
           for(const ex of (s.exercicios||[]))if(familiaDe(ex.nome)===UI.exSel)
-            for(const x of (ex.sets||[]))if(!x.warm&&x.carga>0){
+            for(const x of (ex.sets||[]))if(!x.warm&&num(x.carga)>0){
               const c=kgDe(ex.nome,x.carga);
               if(best==null||c>best)best=c;
               const e=e1rm(c,repsE1(ex.nome,x.reps));if(bestE==null||e>bestE)bestE=e}
@@ -1204,7 +1333,7 @@ function vMed(){
     h+=`<div class="card"><b>Registros</b>`;
     ord.slice(0,15).forEach(m=>{
       h+=`<div class="sess" style="cursor:default"><div class="t"><span class="num">${m.peso!=null?fmt1(m.peso)+" kg":"—"}${m.gordura!=null?` · ${fmt1(m.gordura)}%`:""}</span><span class="d num">${brDate(m.data)}</span></div>
-      <button class="btn-danger" style="margin-top:4px;font-size:12px;padding:4px 8px" onclick="apagarMed('${m.id}')">apagar</button></div>`;
+      <button class="btn-danger" style="margin-top:4px;font-size:12px;padding:4px 8px" onclick="apagarMed(${DB.measures.indexOf(m)})">apagar</button></div>`;
     });
     h+=`</div>`;
   }
@@ -1213,10 +1342,17 @@ function vMed(){
 window.salvarMedida=()=>{
   const nm=UI.novaMed;
   if(!nm.peso&&!nm.gordura){flash("Preencha ao menos o peso");return}
-  DB.measures=[{id:`m-${nm.data}-${uid().slice(0,4)}`,data:nm.data,peso:Number(nm.peso)||null,gordura:Number(nm.gordura)||null,fitas:{}},...DB.measures];
-  persist();UI.novaMed={data:todayISO(),peso:"",gordura:""};flash("Medida salva ✓");render();
+  DB.measures=[{id:`m-${nm.data}-${uid().slice(0,4)}`,data:nm.data,peso:num(nm.peso)||null,gordura:num(nm.gordura)||null,fitas:{}},...DB.measures];
+  persist();registrarUso("salvar_medida");UI.novaMed={data:todayISO(),peso:"",gordura:""};flash("Medida salva ✓");render();
 };
-window.apagarMed=id=>{DB.measures=DB.measures.filter(m=>m.id!==id);persist();flash("Registro apagado");render()};
+window.apagarMed=i=>{
+  const m=DB.measures[i];if(!m)return;
+  openModal(`<h2>Apagar registro?</h2>
+    <div class="sub">${brDate(m.data)} · ${m.peso!=null?fmt1(m.peso)+" kg":"sem peso"}${m.gordura!=null?` · ${fmt1(m.gordura)}%`:""}${m.fitas&&Object.keys(m.fitas).length?" · com perimetria":""}</div>
+    <div class="sub" style="margin-top:10px;color:var(--dim)">Essa ação não pode ser desfeita.</div>`,
+    [{label:"Cancelar",cls:"btn-g",esc:true},
+     {label:"Apagar",cls:"btn-del",fn:()=>{DB.measures=DB.measures.filter(x=>x!==m);persist();registrarUso("apagar_medida",m.data);flash("Registro apagado");render()}}]);
+};
 
 /* ============================ aba Backup ============================ */
 function vBkp(){
@@ -1228,32 +1364,180 @@ function vBkp(){
   </div>
   <div class="card"><b>Exportar backup</b>
     <div class="sub" style="margin-top:4px">Gera o arquivo com todas as sessões, medidas e plano — guarde no iCloud/Arquivos de tempos em tempos.</div>
-    <button style="width:100%;margin-top:12px" onclick="download('backup-treino-'+todayISO()+'.json',JSON.stringify(exportPayload(),null,1));flash('Backup exportado ✓')">⬇ Exportar backup .json</button>
+    ${USO.ultimoBackup?`<div class="sub" style="margin-top:6px">Último exportado em ${brDate(isoD(Date.parse(USO.ultimoBackup)))} (há ${diasDesde(USO.ultimoBackup)} dia${diasDesde(USO.ultimoBackup)===1?"":"s"})</div>`:""}
+    <button style="width:100%;margin-top:12px" onclick="exportarBackup()">⬇ Exportar backup .json</button>
   </div>
   <div class="card"><b>Enviar para o Claude</b>
     <div class="sub" style="margin-top:4px">Gera um arquivo único com o código completo do app + todos os seus dados. Anexe esse arquivo num chat do Claude e peça os ajustes que quiser — o Claude devolve o app atualizado.</div>
     <button style="width:100%;margin-top:12px;border-color:var(--amber);color:var(--amber)" onclick="enviarParaClaude()">✦ Enviar para o Claude</button>
   </div>
+  ${resumoUso()}
   <div class="card"><span class="sub num">Neste aparelho: ${DB.sessions.length} sessões · ${DB.measures.length} medidas${DB.plan?" · plano salvo":""}</span></div>`;
+}
+const diasDesde=iso=>Math.max(0,Math.floor((Date.now()-Date.parse(iso))/DAY));
+window.exportarBackup=()=>{
+  USO.ultimoBackup=new Date().toISOString();registrarUso("exportar_backup");contarTempoAba();gravarUso();
+  download('backup-treino-'+todayISO()+'.json',JSON.stringify(exportPayload(),null,1));flash('Backup exportado ✓');render();
+};
+/* resumo do registro de uso (card da aba Backup) */
+function resumoUso(){
+  const nomeAba=id=>{const t=TABS.find(x=>x[0]===id);return t?t[2]:id};
+  const tA=Object.entries(USO.tempoAbas).sort((a,b)=>b[1]-a[1]);
+  const durs=USO.treinos.map(t=>t.min).filter(m=>m>0);
+  const med=durs.length?Math.round(durs.reduce((a,b)=>a+b,0)/durs.length):null;
+  const toques=Object.values(USO.toques).reduce((a,b)=>a+b,0);
+  const top=Object.entries(USO.toques).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  return `<div class="card"><b>Uso do app</b>
+    <div class="sub" style="margin-top:4px">Registrado só neste aparelho desde ${brDate(isoD(Date.parse(USO.desde)))}. Vai junto no backup e no arquivo do "Enviar para o Claude" para orientar as próximas melhorias.</div>
+    <div style="margin-top:10px">
+      <div class="mrow"><span>Aberturas do app</span><b class="num">${USO.aberturas}</b></div>
+      <div class="mrow"><span>Treinos salvos pelo app</span><b class="num">${USO.treinos.length}${med!=null?` · média ${med} min`:""}</b></div>
+      <div class="mrow"><span>Aba mais usada</span><b>${tA.length?`${esc(nomeAba(tA[0][0]))} · ${fmtDur(tA[0][1])}`:"ainda sem dados"}</b></div>
+      <div class="mrow"><span>Toques registrados</span><b class="num">${toques}</b></div>
+      ${top.length?`<div class="mrow"><span>Mais tocados</span><b style="font-weight:600;text-align:right">${top.map(([k,v])=>`${esc(k.replace(/^(\w+):/,(m,id)=>nomeAba(id)+":"))} (${v})`).join("<br>")}</b></div>`:""}
+      <div class="mrow"><span>Erros do app</span><b class="num" style="${USO.erros.length?"color:var(--red)":""}">${USO.erros.length}</b></div>
+    </div>
+    <button class="btn-g" style="width:100%;margin-top:12px" onclick="zerarUso()">Zerar registro de uso</button>
+  </div>`;
+}
+window.zerarUso=()=>openModal(`<h2>Zerar registro de uso?</h2>
+  <div class="sub" style="margin-top:6px">Apaga só as estatísticas de uso do app. Treinos, medidas e plano não são afetados.</div>`,
+  [{label:"Cancelar",cls:"btn-g",esc:true},
+   {label:"Zerar",cls:"btn-del",fn:()=>{const ub=USO.ultimoBackup;USO=usoVazio();USO.ultimoBackup=ub;abaContada=abaAtual();abaDesde=Date.now();gravarUso();flash("Registro de uso zerado");render()}}]);
+
+/* ============================ aba Início ============================
+   Tela de entrada com as opções principais: o treino em andamento (ou os
+   treinos do plano, com o próximo sugerido), a semana e atalhos para as
+   outras abas. "Próximo" = o treino do plano feito há mais tempo.      */
+const letraTreino=n=>{const m=/treino\s+([a-z0-9])\b/i.exec(n||"");return m?m[1].toUpperCase():(String(n||"").trim().charAt(0)||"+").toUpperCase()};
+const gruposTreino=n=>{const s=String(n||"");const i=s.indexOf(":");return (i>=0?s.slice(i+1):s).trim()};
+function corTreino(exs){
+  const c={};for(const ex of (exs||[])){const g=grupoDe(ex.nome);if(g!=="Outros")c[g]=(c[g]||0)+1}
+  const top=Object.entries(c).sort((a,b)=>b[1]-a[1])[0];return top?COR_G[top[0]]:"var(--amber)";
+}
+function ultimaDoTreino(nome){let u=null;for(const s of DB.sessions)if(s.treinoNome===nome&&(!u||s.data>u.data))u=s;return u}
+const DIAS_S=["dom","seg","ter","qua","qui","sex","sáb"];
+const MESES=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+function vInicio(){
+  const hoje=todayISO(), dH=new Date(ts(hoje));
+  const seg=ts(hoje)-((dH.getDay()+6)%7)*DAY;
+  const porData={};for(const s of DB.sessions)if(!porData[s.data])porData[s.data]=s;
+  const semana=[0,1,2,3,4,5,6].map(i=>{const t=seg+i*DAY,iso=isoD(t);return{iso,lb:DIAS_S[new Date(t).getDay()],s:porData[iso],hoje:iso===hoje,fut:iso>hoje}});
+  const nSem=semana.filter(d=>d.s).length;
+  let h=`<h1>Olá, Lucas</h1>
+  <div class="sub">${DIAS_S[dH.getDay()]}, ${dH.getDate()} de ${MESES[dH.getMonth()]} · ${nSem} treino${nSem===1?"":"s"} nesta semana</div>
+  <div class="card"><div class="hweek">${semana.map(d=>`<div><span class="${d.hoje?"on":""}">${d.lb}</span><i class="hday${d.s?" ok":""}${d.hoje?" hoje":""}${d.fut?" fut":""}" style="--c:${d.s?corTreino(d.s.exercicios):"var(--amber)"}">${d.s?esc(letraTreino(d.s.treinoNome)):""}</i></div>`).join("")}</div></div>`;
+
+  const n=UI.novo, pt=(DB.plan&&Array.isArray(DB.plan.treinos))?DB.plan.treinos:[];
+  if(rascunhoTemConteudo(n)){
+    const exs=n.exercicios||[], ok=exs.filter(e=>e.done).length, pct=exs.length?Math.round(ok/exs.length*100):0;
+    h+=`<div class="hsec">Treino em andamento</div>
+    <div class="card hcont">
+      <div class="hrow"><span class="hlet" style="--c:${corTreino(exs)}">${esc(n.treinoNome?letraTreino(n.treinoNome):"+")}</span>
+        <span class="htx"><b>${esc(gruposTreino(n.treinoNome)||"Treino livre")}</b><small class="num">${brDate(n.data)}${n.academia?` · ${esc(n.academia)}`:""} · ${ok}/${exs.length} exercícios</small></span></div>
+      <div class="progbar" style="margin-top:12px"><div class="progfill" style="width:${pct}%"></div></div>
+      <button class="btn-p" style="width:100%;margin-top:12px" onclick="irPara('treino')">Continuar treino</button>
+    </div>`;
+  }else{
+    if(pt.length){
+      const ults=pt.map(t=>ultimaDoTreino(t.nome));
+      let sug=0;pt.forEach((t,i)=>{const a=ults[i]?ults[i].data:"",b=ults[sug]?ults[sug].data:"";if(a<b)sug=i});
+      h+=`<div class="hsec">Começar treino</div>`+pt.map((t,i)=>{
+        const u=ults[i], dias=u?Math.round((ts(hoje)-ts(u.data))/DAY):null;
+        const quando=!u?"ainda não registrado":dias<=0?"hoje":dias===1?"ontem":`há ${dias} dias`;
+        return `<button class="htreino${i===sug?" hsug":""}" onclick="iniciarTreino(${i})">
+          <span class="hlet" style="--c:${corTreino(t.exercicios)}">${esc(letraTreino(t.nome))}</span>
+          <span class="htx"><b>${esc(gruposTreino(t.nome)||t.nome||"Treino")}</b><small class="num">${(t.exercicios||[]).length} exercícios · ${u?`última ${quando} · ${fmtT(tonelagemSessao(u)).replace(" ","\u00a0")}`:quando}</small></span>
+          ${i===sug?`<span class="htag">próximo</span>`:`<span class="hchev">›</span>`}
+        </button>`}).join("");
+    }
+    h+=`<button class="btn-g" style="width:100%;margin-top:8px" onclick="treinoLivre()">+ ${pt.length?"Treino livre":"Registrar treino"}</button>`;
+  }
+
+  let ult=null;for(const s of DB.sessions)if(!ult||s.data>ult.data)ult=s;
+  let mU=null;for(const m of DB.measures)if(!mU||m.data>mU.data)mU=m;
+  const n30=DB.sessions.filter(s=>s.data>isoD(ts(hoje)-30*DAY)).length;
+  const tile=(id,ic,tit,sub)=>`<button class="htile" onclick="irPara('${id}')"><span class="ic">${ic}</span><b>${tit}</b><small class="num">${sub}</small></button>`;
+  h+=`<div class="hsec">Atalhos</div><div class="htiles">
+    ${tile("hist","🗓","Histórico",ult?`último: ${brDate(ult.data)} · ${fmtT(tonelagemSessao(ult))}`:"nenhuma sessão ainda")}
+    ${tile("dash","📈","Dashboard",`${n30} treino${n30===1?"":"s"} nos últimos 30 dias`)}
+    ${tile("med","⚖️","Medidas",mU?`${mU.peso!=null?fmt1(mU.peso)+" kg":""}${mU.gordura!=null?` · ${fmt1(mU.gordura)}%`:""} em ${brDate(mU.data)}`:"nenhum registro ainda")}
+    ${tile("bkp","💾","Backup",USO.ultimoBackup?`último há ${diasDesde(USO.ultimoBackup)} dia${diasDesde(USO.ultimoBackup)===1?"":"s"}`:`${DB.sessions.length} sessões no aparelho`)}
+  </div>`;
+  return h;
+}
+window.irPara=id=>{TAB=id;render()};
+window.iniciarTreino=i=>{
+  const t=((DB.plan&&DB.plan.treinos)||[])[i];if(!t)return;
+  UI.novo=novoTreinoVazio();TAB="treino";SCROLL.treino=0;
+  registrarUso("iniciar_pelo_inicio",letraTreino(t.nome));
+  selectPlanTreino(i);
+};
+window.treinoLivre=()=>{UI.novo=novoTreinoVazio();UI.novo.inicio=Date.now();TAB="treino";SCROLL.treino=0;registrarUso("treino_livre");render()};
+
+/* ================= onde você estava e preferências de uso =================
+   Cada aba guarda a própria rolagem: trocar de aba e voltar devolve você
+   ao mesmo ponto. Isso e as seleções (sessão aberta, período, grupo,
+   exercício, seções recolhidas) também ficam gravados no aparelho:
+   - preferências (período, seções, grupo, exercício): valem sempre;
+   - posição (aba, rolagem, sessão aberta): se o iOS fechar o app em
+     segundo plano, ele reabre no mesmo lugar por até 30 minutos. Depois
+     disso abre na tela inicial (ou no treino, se houver um em andamento). */
+const UI_KEY="gym-app-ui-v1", UI_JANELA=30*60*1000;
+let SCROLL={};
+function salvarEstadoUI(){
+  try{
+    const app=$("#app");if(app&&TAB_ANT===TAB)SCROLL[TAB]=app.scrollTop;
+    localStorage.setItem(UI_KEY,JSON.stringify({
+      pos:{t:Date.now(),tab:TAB,scroll:SCROLL,openSess:UI.openSess,qtdHist:UI.qtdHist},
+      pref:{per:UI.per,ini:UI.ini,fim:UI.fim,secs:UI.secs,gSel:UI.gSel,exSel:UI.exSel}}));
+  }catch(e){}
+}
+function carregarEstadoUI(){
+  let j=null;try{j=JSON.parse(localStorage.getItem(UI_KEY)||"null")}catch(e){}
+  if(!j||typeof j!=="object")return false;
+  const p=j.pref||{};
+  if(p.secs&&typeof p.secs==="object")UI.secs=p.secs;
+  if(p.gSel)UI.gSel=p.gSel;
+  if(p.exSel)UI.exSel=p.exSel;
+  if(p.per)aplicarPeriodo(p.per);
+  else if(p.ini&&p.fim){UI.ini=p.ini;UI.fim=p.fim;UI.per=null}
+  const q=j.pos;
+  if(!q||!(Date.now()-q.t<UI_JANELA))return false;
+  if(TABS.some(t=>t[0]===q.tab))TAB=q.tab;
+  SCROLL=q.scroll&&typeof q.scroll==="object"?q.scroll:{};
+  if(q.openSess)UI.openSess=q.openSess;
+  if(q.qtdHist>20)UI.qtdHist=q.qtdHist;
+  return true;
 }
 
 /* ============================ shell ============================ */
-const TABS=[["treino","🏋️","Treino"],["hist","🗓","Histórico"],["dash","📈","Dashboard"],["med","⚖️","Medidas"],["bkp","💾","Backup"]];
+const TABS=[["inicio","🏠","Início"],["treino","🏋️","Treino"],["hist","🗓","Histórico"],["dash","📈","Dashboard"],["med","⚖️","Medidas"],["bkp","💾","Backup"]];
 let TAB_ANT=null;
 function render(){
-  const views={treino:vTreino,hist:vHist,dash:vDash,med:vMed,bkp:vBkp};
+  const views={inicio:vInicio,treino:vTreino,hist:vHist,dash:vDash,med:vMed,bkp:vBkp};
+  if(!views[TAB])TAB="inicio";
   const app=$("#app");
-  /* trocar de aba volta ao topo; redesenhar a mesma aba mantem onde voce esta */
   const mesmaAba=(TAB_ANT===TAB), y=app?app.scrollTop:0;
+  if(!mesmaAba){
+    if(TAB_ANT)SCROLL[TAB_ANT]=y;       /* guarda onde você estava na aba que saiu */
+    contarTempoAba();
+    if(TAB_ANT)registrarUso("aba",TAB);
+  }
   app.innerHTML=views[TAB]();
   const pt=$("#progtop");
   if(pt){pt.innerHTML=progressoHTML();document.body.classList.toggle("prog",!!pt.innerHTML)}
   $("#nav").innerHTML=TABS.map(([id,ic,lb])=>`<button class="${TAB===id?"on":""}" onclick="TAB='${id}';render()"><span class="ic">${ic}</span>${lb}</button>`).join("");
   TAB_ANT=TAB;
-  app.scrollTop = mesmaAba ? y : 0;
+  /* voltar a uma aba devolve a rolagem dela; redesenhar a mesma aba mantém a posição */
+  app.scrollTop = mesmaAba ? y : (SCROLL[TAB]||0);
+  salvarEstadoUI();
   salvarRascunho();
 }
 const RASC_REC=carregarRascunho();
+const UI_REC=carregarEstadoUI();
+if(!UI_REC)TAB=RASC_REC?"treino":"inicio";
+USO.aberturas++;registrarUso("app_aberto",{aba:TAB,retomou:UI_REC,rascunho:RASC_REC});
 window.render=render;window.UI=UI;window.importFile=importFile;window.enviarParaClaude=enviarParaClaude;window.download=download;window.exportPayload=exportPayload;window.todayISO=todayISO;window.normNome=normNome;window.closeModal=closeModal;window.esc=esc;
 render();
 if(RASC_REC)flash("Treino em andamento recuperado ✓");
@@ -1398,8 +1682,13 @@ function aoSair(){
   const a=document.activeElement;
   if(a&&a.tagName==="INPUT"&&a.dispatchEvent){try{a.dispatchEvent(new Event("change",{bubbles:true}))}catch(e){}}
   salvarRascunho();
+  /* grava onde você estava e para de contar o tempo da aba em segundo plano */
+  salvarEstadoUI();
+  if(abaContada){contarTempoAba();abaContada=null}
+  gravarUso();
 }
 function aoVoltar(){
+  if(!abaContada){abaContada=abaAtual();abaDesde=Date.now();USO.retornos=(USO.retornos||0)+1;agendarUso()}
   campoFoco=null;manual=false;
   document.body.classList.remove("kb");
   sincronizarViewport();
