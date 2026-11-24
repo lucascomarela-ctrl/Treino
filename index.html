@@ -736,7 +736,8 @@ const legend=items=>`<div class="lg">${items.map(([c,l])=>`<span><i style="backg
 /* ==================== grupamento muscular ====================
    Lista ordenada: vence o primeiro que casar. A ordem resolve as
    ambiguidades — "Gêmeos Em Pé Hack" é panturrilha (apesar do "Hack"),
-   "Remada Alta" e "Crucifixo Inverso" são ombro (não dorsais / peitoral),
+   "Crucifixo Inverso" é ombro (não peitoral), "Remada Alta" fica em
+   Dorsais (costas, por decisão do Lucas em nov/2026),
    "Cadeira Abdutora" é glúteo (antes de cair no genérico "cadeira"),
    "Coice de Tríceps" é tríceps e "Coice" sozinho é glúteo.
    Trapézio é grupo próprio; lombar/hiperextensão entram em Dorsais.  */
@@ -745,7 +746,7 @@ const GRUPOS=[
   ["Antebraço",/antebra[çc]o|punho|preens[ãa]o|rosca inversa|farmer|handgrip/i],
   ["Bíceps",/rosca|b[íi]ceps|scott|martelo|concentrad/i],
   ["Tríceps",/tr[íi]ceps|testa|franc[êe]s|mergulho|paralelas?\b|pushdown/i],
-  ["Ombros",/desenvolvimento|militar|eleva[çc][ãa]o lateral|eleva[çc][ãa]o frontal|remada alta|cru\S* (inverso|invertido)|arnold|deltoid|ombro|face pull/i],
+  ["Ombros",/desenvolvimento|militar|eleva[çc][ãa]o lateral|eleva[çc][ãa]o frontal|cru\S* (inverso|invertido)|arnold|deltoid|ombro|face pull/i],
   ["Abdome",/abdominal|abd[oô]men|abdome|prancha|obl[íi]qu|eleva[çc][ãa]o de pernas|romana|core/i],
   ["Trapézio",/encolhimento|trap[ée]zio|shrug/i],
   ["Peitoral",/supino|crucifixo|cross-?over|peck|voador|peitoral|flex[ãa]o de bra[çc]o/i],
@@ -2096,6 +2097,42 @@ function sincronizarViewport(){
 }
 window.sincronizarViewport=sincronizarViewport;
 
+/* iOS standalone: depois que o teclado fecha, o WebKit as vezes deixa o
+   viewport "preso" menor (innerHeight e visualViewport.height nao voltam),
+   o que deixa uma faixa preta embaixo da barra de abas. Guardamos a maior
+   altura ja vista sem teclado e, se a atual ficar abaixo dela, forcamos o
+   WebKit a remedir escondendo e mostrando o #shell num unico reflow.   */
+let alturaMax=0, larguraRef=0;
+function campoAtivo(){
+  const a=document.activeElement;
+  return !!(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"||a.tagName==="SELECT"));
+}
+function registrarAlturaMax(){
+  if(document.visibilityState==="hidden"||campoAtivo())return;
+  const w=window.innerWidth, h=window.innerHeight;
+  if(w!==larguraRef){larguraRef=w;alturaMax=h;return}   /* girou: recomeca */
+  if(h>alturaMax)alturaMax=h;
+}
+function destravarViewport(){
+  if(document.visibilityState==="hidden"||campoAtivo())return false;
+  if(window.innerWidth!==larguraRef||!alturaMax)return false;
+  if(window.innerHeight>=alturaMax-4)return false;
+  const sh=elShell(), app=elApp();
+  if(!sh)return false;
+  const top=app?app.scrollTop:0;
+  sh.style.display="none";
+  void sh.offsetHeight;          /* reflow sincrono, sem pintar no meio */
+  sh.style.display="";
+  if(app)app.scrollTop=top;
+  sincronizarViewport();
+  return true;
+}
+function conferirViewport(){
+  if(!destravarViewport())registrarAlturaMax();
+  else setTimeout(()=>{sincronizarViewport();registrarAlturaMax()},120);
+}
+window.destravarViewport=destravarViewport;
+
 /* a barra de progresso agora fica fora da area rolavel: o topo do #app ja
    comeca abaixo dela, entao basta uma folga visual minima */
 function folgaTopo(){ return FOLGA_TOPO_MIN; }
@@ -2136,7 +2173,7 @@ if(window.visualViewport){
   });
   window.visualViewport.addEventListener("scroll",sincronizarViewport);
 }
-window.addEventListener("resize",sincronizarViewport);
+window.addEventListener("resize",()=>{sincronizarViewport();registrarAlturaMax()});
 window.addEventListener("orientationchange",()=>setTimeout(sincronizarViewport,250));
 
 document.addEventListener("focusin",e=>{
@@ -2155,6 +2192,9 @@ document.addEventListener("focusout",()=>{
     if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"||a.tagName==="SELECT"))return;
     campoFoco=null;manual=false;clearTimeout(tRevela);
     sincronizarViewport();
+    /* da tempo do teclado terminar de descer e confere se o iOS travou */
+    setTimeout(conferirViewport,160);
+    setTimeout(conferirViewport,600);
   },120);
 });
 /* o dedo tem prioridade: durante o arrasto o app nao reposiciona nada */
@@ -2198,7 +2238,7 @@ function aoVoltar(){
   sincronizarViewport();
   try{render()}catch(e){}
   setTimeout(sincronizarViewport,150);
-  setTimeout(sincronizarViewport,600);
+  setTimeout(()=>{sincronizarViewport();conferirViewport()},600);
 }
 document.addEventListener("visibilitychange",()=>{
   if(document.visibilityState==="hidden")aoSair();else aoVoltar();
@@ -2208,6 +2248,9 @@ window.addEventListener("pageshow",e=>{if(e.persisted)aoVoltar()});
 window.addEventListener("focus",()=>setTimeout(sincronizarViewport,50));
 
 sincronizarViewport();
+registrarAlturaMax();
+/* rede de seguranca: ao trocar de aba ou tocar fora de um campo, confere */
+document.addEventListener("click",e=>{if(!campoAtivo()&&e.target&&e.target.closest&&e.target.closest("#nav"))setTimeout(conferirViewport,50)},true);
 </script>
 </body>
 </html>
